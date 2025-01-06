@@ -1,8 +1,14 @@
-CREATE DATABASE DS_DEV_DB;
+-- CREATE DATABASE DS_DEV_DB;
 
-CREATE SCHEMA DS_DEV_DB.DOC_AI_SCHEMA;
+-- CREATE SCHEMA DS_DEV_DB.DOC_AI_SCHEMA;
 
-use database ds_dev_db;
+-- use database ds_dev_db;
+
+Create or replace database DS_DEV_DB;
+
+create or replace schema DOC_AI_SCHEMA;
+
+create or replace warehouse DS_DEV_WH;
 
 CREATE STAGE INVOICE_DOCS 
 	DIRECTORY = ( ENABLE = true ) 
@@ -93,9 +99,7 @@ CREATE OR REPLACE TABLE Purchase_Flatten (
     DISCOUNT_SCORE FLOAT,                       
     DISCOUNT_VALUE STRING,                       
     INVOICE_DATE_SCORE FLOAT,                   
-    INVOICE_DATE_VALUE STRING,                   
-    INV_NUMBER_SCORE FLOAT,                     
-    INV_NUMBER_VALUE STRING,                     
+    INVOICE_DATE_VALUE STRING,                                       
     ITEM_DESCRIPTIONS_SCORE FLOAT,              
     ITEM_DESCRIPTIONS_VALUE STRING,              
     PO_NUMBER_SCORE FLOAT,                       
@@ -135,8 +139,7 @@ CREATE OR REPLACE TABLE Purchase_Validated (
     RELATIVEPATH STRING,                    
     AMOUNT_VALUE STRING,                    
     DISCOUNT_VALUE STRING,                  
-    INVOICE_DATE_VALUE STRING,               
-    INV_NUMBER_VALUE STRING,                 
+    INVOICE_DATE_VALUE STRING,                              
     ITEM_DESCRIPTIONS_VALUE STRING,          
     PO_NUMBER_VALUE STRING,                  
     QUANTITY_VALUE STRING,                  
@@ -170,26 +173,47 @@ VALUES
     ('PURCHASE_MODEL', 'PURCHASE_FLATTEN', 'PURCHASE_VALIDATED', '%PURCHASE%', 2),
     ('PURCHASE_MODEL', 'PURCHASE_FLATTEN', 'PURCHASE_VALIDATED', '%purchase%', 2);
 
-INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
-VALUES
-    ('INVOICE_MODEL', 'DELIVERY_DATE', 0.999),
-    ('INVOICE_MODEL', 'ORDER_DATE', 0.999),
-    ('INVOICE_MODEL', 'PO_NUMBER', 0.999),
-    ('INVOICE_MODEL', 'SUB_TOTAL', 0.998),
-    ('INVOICE_MODEL', 'TAX_AMOUNT', 0.251), 
-    ('INVOICE_MODEL', 'TOTAL_AMOUNT', 0.776),
-    ('INVOICE_MODEL', 'ocrScore', 0.9); 
+-- INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
+-- VALUES
+--     ('INVOICE_MODEL', 'DELIVERY_DATE', 0.999),
+--     ('INVOICE_MODEL', 'ORDER_DATE', 0.999),
+--     ('INVOICE_MODEL', 'PO_NUMBER', 0.999),
+--     ('INVOICE_MODEL', 'SUB_TOTAL', 0.998),
+--     ('INVOICE_MODEL', 'TAX_AMOUNT', 0.251), 
+--     ('INVOICE_MODEL', 'TOTAL_AMOUNT', 0.776),
+--     ('INVOICE_MODEL', 'ocrScore', 0.9); 
+
+-- INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
+-- VALUES
+--     ('PURCHASE_MODEL', 'AMOUNT', 0.706),                      
+--     ('PURCHASE_MODEL', 'INVOICE_DATE', 1.0),                       
+--     ('PURCHASE_MODEL', 'ITEM_DESCRIPTIONS', 1.0),       
+--     ('PURCHASE_MODEL', 'PO_NUMBER', 0.945),             
+--     ('PURCHASE_MODEL', 'QUANTITY', 1.0),                
+--     ('PURCHASE_MODEL', 'RATE', 1.0),                    
+--     ('PURCHASE_MODEL', 'ocrScore', 0.887);     
+
 
 INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
 VALUES
-    ('PURCHASE_MODEL', 'AMOUNT', 0.706),                      
-    ('PURCHASE_MODEL', 'INVOICE_DATE', 1.0),            
-    ('PURCHASE_MODEL', 'INV_NUMBER', 1.0),             
-    ('PURCHASE_MODEL', 'ITEM_DESCRIPTIONS', 1.0),       
-    ('PURCHASE_MODEL', 'PO_NUMBER', 0.945),             
-    ('PURCHASE_MODEL', 'QUANTITY', 1.0),                
-    ('PURCHASE_MODEL', 'RATE', 1.0),                    
-    ('PURCHASE_MODEL', 'ocrScore', 0.887);     
+    ('INVOICE_MODEL', 'DELIVERY_DATE', 1),
+    ('INVOICE_MODEL', 'ORDER_DATE', 1),
+    ('INVOICE_MODEL', 'PO_NUMBER', 1),
+    ('INVOICE_MODEL', 'SUB_TOTAL', 1),
+    ('INVOICE_MODEL', 'TAX_AMOUNT', 0.998), 
+    ('INVOICE_MODEL', 'TOTAL_AMOUNT', 0.998),
+    ('INVOICE_MODEL', 'ocrScore', 0.97); 
+
+INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
+VALUES
+    ('PURCHASE_MODEL', 'AMOUNT', 1),                      
+    ('PURCHASE_MODEL', 'INVOICE_DATE', 1),                       
+    ('PURCHASE_MODEL', 'ITEM_DESCRIPTIONS', 1),       
+    ('PURCHASE_MODEL', 'PO_NUMBER', 1),             
+    ('PURCHASE_MODEL', 'QUANTITY', 1),                
+    ('PURCHASE_MODEL', 'RATE', 1),                    
+    ('PURCHASE_MODEL', 'ocrScore', 0.97);   
+
 
 CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.COUNT_PDF_PAGES_PROC()
 RETURNS VARCHAR(16777216)
@@ -335,6 +359,140 @@ def count_pages(session):
 ';
 
 
+-- CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.HANDLE_PDF_FILES()
+-- RETURNS VARCHAR(16777216)
+-- LANGUAGE PYTHON
+-- RUNTIME_VERSION = '3.8'
+-- PACKAGES = ('snowflake-snowpark-python')
+-- HANDLER = 'main'
+-- EXECUTE AS OWNER
+-- AS '
+-- from snowflake.snowpark.session import Session
+-- from snowflake.snowpark.exceptions import SnowparkSQLException
+-- from datetime import datetime
+
+-- def main(session: Session) -> str:
+--     try:
+--         # Query to fetch all files with `NOT PROCESSED` status
+--         get_file_name_query = """
+--             SELECT 
+--                 FILENAME, 
+--                 ROWID, 
+--                 CAST(FILESIZE AS FLOAT) AS FILESIZE, 
+--                 CAST(NUMBER_OF_PAGES AS INT) AS NUMBER_OF_PAGES
+--             FROM DOCAI_PREFILTER
+--             WHERE STATUS = ''NOT PROCESSED''
+--         """
+        
+--         # Execute the query
+--         rows = session.sql(get_file_name_query).collect()
+        
+--         # Check if there are records to process
+--         if not rows:
+--             return "No files to process."
+
+--         for row in rows:
+--             file_name = row["FILENAME"]
+--             row_id = row["ROWID"]
+--             file_size_mb = row["FILESIZE"] / (1024 * 1024)  # Convert bytes to MB
+--             number_of_pages = row["NUMBER_OF_PAGES"]
+
+--             # Update status to IN PROGRESS
+--             session.sql(f"""
+--                 UPDATE DOCAI_PREFILTER
+--                 SET STATUS = ''IN PROGRESS'',
+--                     COMMENT = ''Processing in progress.''
+--                 WHERE ROWID = ''{row_id}''
+--             """).collect()
+
+--             try:
+--                 # Record the start time for processing
+--                 process_start_time = session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
+
+--                 # Query metadata table to determine model and prediction type
+--                 metadata_query = f"""
+--                     SELECT MODEL_NAME, PREDICTION_TYPE
+--                     FROM DS_DEV_DB.DOC_AI_SCHEMA.MODEL_METADATA
+--                     WHERE LOWER(''{file_name}'') LIKE LOWER(PATTERN)
+--                     LIMIT 1
+--                 """
+--                 metadata_result = session.sql(metadata_query).collect()
+
+--                 # If no matching metadata found, skip the file
+--                 if not metadata_result:
+--                     session.sql(f"""
+--                         UPDATE DOCAI_PREFILTER
+--                         SET STATUS = ''SKIPPED'',
+--                             COMMENT = ''No matching metadata pattern found.'',
+--                             PROCESS_END_TIME = CURRENT_TIMESTAMP
+--                         WHERE ROWID = ''{row_id}''
+--                     """).collect()
+--                     continue
+
+--                 # Extract model details
+--                 model_name = metadata_result[0]["MODEL_NAME"]
+--                 prediction_type = metadata_result[0]["PREDICTION_TYPE"]
+
+--                 # Process files meeting criteria
+--                 json_result = session.sql(f"""
+--                     SELECT DS_DEV_DB.DOC_AI_SCHEMA.{model_name}!PREDICT(
+--                         GET_PRESIGNED_URL(@INVOICE_DOCS, ''{file_name}''), {prediction_type}
+--                     )
+--                 """).collect()[0][0]
+
+--                 # Insert into extraction table
+--                 session.sql(f"""
+--                     INSERT INTO DocAI_OrderForm_Extraction (
+--                         RelativePath, Model_Name, Size, File_Url, JSON, Comments, Status, PROCESS_START_TIME, PROCESS_END_TIME
+--                     )
+--                     SELECT 
+--                         ''{file_name}'' AS RelativePath, 
+--                         ''{model_name}'' AS Model_Name,
+--                         {row["FILESIZE"]} AS Size, 
+--                         GET_PRESIGNED_URL(@INVOICE_DOCS, ''{file_name}'') AS File_Url, 
+--                         PARSE_JSON(''{json_result}'') AS JSON,
+--                         ''File processed successfully.'' AS Comments,
+--                         ''NOT PROCESSED'' AS Status,
+--                         ''{process_start_time}'' AS PROCESS_START_TIME,
+--                         CURRENT_TIMESTAMP AS PROCESS_END_TIME
+--                 """).collect()
+
+--                 # Update status to PROCESSED
+--                 session.sql(f"""
+--                     UPDATE DOCAI_PREFILTER
+--                     SET STATUS = ''PROCESSED'',
+--                         COMMENT = ''File processed and moved to DocAI_OrderForm_Extraction.''
+--                     WHERE ROWID = ''{row_id}''
+--                 """).collect()
+
+--             except Exception as e:
+--                 # Log error in extraction table
+--                 session.sql(f"""
+--                     INSERT INTO DocAI_OrderForm_Extraction (
+--                         RelativePath, Model_Name, Size, File_Url, JSON, Comments, Status, PROCESS_START_TIME, PROCESS_END_TIME
+--                     )
+--                     SELECT 
+--                         ''{file_name}'' AS RelativePath, 
+--                         NULL AS Model_Name,
+--                         {row["FILESIZE"]} AS Size, 
+--                         NULL AS File_Url, 
+--                         NULL AS JSON, 
+--                         ''Processing failed: {str(e)}'' AS Comments,
+--                         ''ERROR'' AS Status,
+--                         ''{process_start_time}'' AS PROCESS_START_TIME,
+--                         CURRENT_TIMESTAMP AS PROCESS_END_TIME
+--                     """).collect()
+--                 raise e
+
+--         return "Files processed successfully."
+
+--     except SnowparkSQLException as e:
+--         return f"SQL Error: {str(e)}"
+--     except Exception as e:
+--         return f"General Error: {str(e)}"
+-- ';
+
+
 CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.HANDLE_PDF_FILES()
 RETURNS VARCHAR(16777216)
 LANGUAGE PYTHON
@@ -373,15 +531,34 @@ def main(session: Session) -> str:
             file_size_mb = row["FILESIZE"] / (1024 * 1024)  # Convert bytes to MB
             number_of_pages = row["NUMBER_OF_PAGES"]
 
-            # Update status to IN PROGRESS
-            session.sql(f"""
-                UPDATE DOCAI_PREFILTER
-                SET STATUS = ''IN PROGRESS'',
-                    COMMENT = ''Processing in progress.''
-                WHERE ROWID = ''{row_id}''
-            """).collect()
-
             try:
+                # Check the file size and number of pages criteria
+                if file_size_mb > 2 and number_of_pages > 10:
+                    # Move files to manual_review stage
+                    session.sql(f"""
+                        COPY FILES INTO @manual_review
+                        FROM @INVOICE_DOCS
+                        FILES = (''{file_name}'')
+                    """).collect()
+
+                    # Update status to MANUAL REVIEW
+                    session.sql(f"""
+                        UPDATE DOCAI_PREFILTER
+                        SET STATUS = ''MANUAL REVIEW'',
+                            COMMENT = ''File moved to manual_review stage as it failed both criteria.'',
+                            PROCESS_END_TIME = CURRENT_TIMESTAMP
+                        WHERE ROWID = ''{row_id}''
+                    """).collect()
+                    continue  # Skip to the next file in the loop
+
+                # Update status to IN PROGRESS
+                session.sql(f"""
+                    UPDATE DOCAI_PREFILTER
+                    SET STATUS = ''IN PROGRESS'',
+                        COMMENT = ''Processing in progress.''
+                    WHERE ROWID = ''{row_id}''
+                """).collect()
+
                 # Record the start time for processing
                 process_start_time = session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
 
@@ -457,8 +634,16 @@ def main(session: Session) -> str:
                         ''ERROR'' AS Status,
                         ''{process_start_time}'' AS PROCESS_START_TIME,
                         CURRENT_TIMESTAMP AS PROCESS_END_TIME
-                    """).collect()
-                raise e
+                """).collect()
+
+                # Update status in DOCAI_PREFILTER
+                session.sql(f"""
+                    UPDATE DOCAI_PREFILTER
+                    SET STATUS = ''ERROR'',
+                        COMMENT = ''Error during processing: {str(e)}''
+                    WHERE ROWID = ''{row_id}''
+                """).collect()
+                # Log the error and move to the next file
 
         return "Files processed successfully."
 
@@ -467,6 +652,7 @@ def main(session: Session) -> str:
     except Exception as e:
         return f"General Error: {str(e)}"
 ';
+
 
 CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.MANAGE_MANUAL_REVIEW_FILES()
 
@@ -1032,7 +1218,6 @@ def main(session):
                 AMOUNT_VALUE,
                 DISCOUNT_VALUE,
                 INVOICE_DATE_VALUE,
-                INV_NUMBER_VALUE,
                 ITEM_DESCRIPTIONS_VALUE,
                 PO_NUMBER_VALUE,
                 QUANTITY_VALUE,
@@ -1065,7 +1250,6 @@ def main(session):
                         AMOUNT_VALUE,
                         DISCOUNT_VALUE,
                         INVOICE_DATE_VALUE,
-                        INV_NUMBER_VALUE,
                         ITEM_DESCRIPTIONS_VALUE,
                         PO_NUMBER_VALUE,
                         QUANTITY_VALUE,
@@ -1077,7 +1261,6 @@ def main(session):
                         '{handle_null(record["AMOUNT_VALUE"])}',
                         '{handle_null(record["DISCOUNT_VALUE"])}',
                         '{handle_null(record["INVOICE_DATE_VALUE"])}',
-                        '{handle_null(record["INV_NUMBER_VALUE"])}',
                         '{handle_null(record["ITEM_DESCRIPTIONS_VALUE"])}',
                         '{handle_null(record["PO_NUMBER_VALUE"])}',
                         '{handle_null(record["QUANTITY_VALUE"])}',
@@ -1171,7 +1354,7 @@ try {
 
     // Copy the file from manual_review stage to orderform_doc stage
     var copy_file_query = `
-        COPY FILES INTO @IGNORED_DOCS
+        COPY FILES INTO @IGNOIRED_DOCS
         FROM @manual_review
         PATTERN = ''${completePattern}''`;
     snowflake.execute({ sqlText: copy_file_query });
@@ -1227,6 +1410,15 @@ create or replace task DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESSING
 	when SYSTEM$STREAM_HAS_DATA('PREPROCESS_STREAM')
 	as BEGIN
     CALL COUNT_PDF_PAGES_PROC();
+END;
+
+
+
+create or replace task DS_DEV_DB.DOC_AI_SCHEMA.FILE_CLEANUP
+	warehouse=DS_DEV_WH
+	after DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESSING
+	as BEGIN
+    CALL MANAGE_MANUAL_REVIEW_FILES();
 END;
 
 -- Resume the Flatten Data Task

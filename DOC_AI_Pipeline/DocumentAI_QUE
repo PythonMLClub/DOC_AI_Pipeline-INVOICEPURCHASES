@@ -1,0 +1,18 @@
+INVOICE_MODEL
+
+1	DELIVERY_DATE	What is the delivery date?	-	-
+2	ORDER_DATE	What is the order date?	-	-
+3	PO_NUMBER	What is the purchase order number (P.O)?	-	-
+4	SUB_TOTAL	What is the sub-total amount?	-	-
+5	TAX_AMOUNT	What is the amount as tax?	-	-
+6	TOTAL_AMOUNT	What is the total ?
+
+PURCHASE_MODEL
+
+1	AMOUNT	What is the Amount?	-	-
+2	DISCOUNT	Is there any discount mentioned in this invoice, and what is the amount?	-	-
+3	INVOICE_DATE	What is the order date?	-	-
+4	ITEM_DESCRIPTIONS	What are the descriptions of the items listed in this purchase document?	-	-
+5	PO_NUMBER	What is the purchase order number (P.O)?	-	-
+6	QUANTITY	What is the total qty of all items in this purchase?	-	-
+7	RATE	What is the price per unit for each item listed in the purchase order?

@@ -1,1431 +1,1468 @@
--- CREATE DATABASE DS_DEV_DB;
-
--- CREATE SCHEMA DS_DEV_DB.DOC_AI_SCHEMA;
-
--- use database ds_dev_db;
-
-Create or replace database DS_DEV_DB;
-
-create or replace schema DOC_AI_SCHEMA;
-
-create or replace warehouse DS_DEV_WH;
-
-CREATE STAGE INVOICE_DOCS 
-	DIRECTORY = ( ENABLE = true ) 
-	ENCRYPTION = ( TYPE = 'SNOWFLAKE_SSE' );
-
-CREATE STAGE IGNOIRED_DOCS 
-	DIRECTORY = ( ENABLE = true ) 
-	ENCRYPTION = ( TYPE = 'SNOWFLAKE_SSE' );
-
-CREATE STAGE MANUAL_REVIEW 
-	DIRECTORY = ( ENABLE = true ) 
-	ENCRYPTION = ( TYPE = 'SNOWFLAKE_SSE' );
-    
-create or replace stream DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESS_STREAM on directory(@INVOICE_DOCS);
-
-CREATE OR REPLACE TABLE DS_DEV_DB.DOC_AI_SCHEMA.MODEL_METADATA (
-    MODEL_NAME VARCHAR(255),          
-    FLATTEN_TABLE VARCHAR(255),       
-    VALIDATED_TABLE VARCHAR(255),     
-    PATTERN VARCHAR(255),             
-    PREDICTION_TYPE NUMBER(1)         
-);
-
-create or replace TABLE DS_DEV_DB.DOC_AI_SCHEMA.DOCAI_PREFILTER (
-	ROWID NUMBER(38,0) autoincrement start 1 increment 1 noorder,
-	MODEL_NAME VARCHAR(255),
-	FILENAME VARCHAR(16777216),
-	FILESIZE VARCHAR(255),
-	NUMBER_OF_PAGES NUMBER(38,0),
-	DATECREATED TIMESTAMP_LTZ(9),
-	COMMENT VARCHAR(16777216),
-	STATUS VARCHAR(16777216),
-	PROCESS_START_TIME TIMESTAMP_LTZ(9),
-	PROCESS_END_TIME TIMESTAMP_LTZ(9)
-);
-
-
-create or replace TABLE DS_DEV_DB.DOC_AI_SCHEMA.DOCAI_ORDERFORM_EXTRACTION (
-	RELATIVEPATH VARCHAR(16777216),
-	MODEL_NAME VARCHAR(255),
-	SIZE NUMBER(38,0),
-	FILE_URL VARCHAR(16777216),
-	JSON VARIANT,
-	COMMENTS VARCHAR(16777216),
-	STATUS VARCHAR(16777216),
-	PROCESS_START_TIME TIMESTAMP_LTZ(9),
-	PROCESS_END_TIME TIMESTAMP_LTZ(9)
-);
-
-
-CREATE OR REPLACE TABLE Invoice_Flatten (
-    RELATIVEPATH STRING,
-    MODEL_NAME STRING,
-    OCR_SCORE FLOAT,
-    DELIVERY_DATE_SCORE FLOAT,
-    DELIVERY_DATE_VALUE STRING,
-    ORDER_DATE_SCORE FLOAT,
-    ORDER_DATE_VALUE STRING,
-    PO_NUMBER_SCORE FLOAT,
-    PO_NUMBER_VALUE STRING,
-    SUB_TOTAL_SCORE FLOAT,
-    SUB_TOTAL_VALUE STRING,
-    TAX_AMOUNT_SCORE FLOAT,
-    TAX_AMOUNT_VALUE STRING,
-    TOTAL_AMOUNT_SCORE FLOAT,
-    TOTAL_AMOUNT_VALUE STRING,
-    COMMENTS STRING,
-    STATUS STRING,
-    PROCESSED_TIMESTAMP TIMESTAMP,
-    PROCESS_START_TIME TIMESTAMP,
-    PROCESS_END_TIME TIMESTAMP
-);
-
-CREATE OR REPLACE TABLE DS_DEV_DB.DOC_AI_SCHEMA.invoice_col_score_failed_history (
-    SCORE_NAME STRING,         
-    SCORE_VALUE FLOAT,         
-    DATE_FAILED TIMESTAMP,      
-    FILENAME STRING,            
-    COMMENTS STRING             
-);
-
-CREATE OR REPLACE TABLE Purchase_Flatten (
-    RELATIVEPATH STRING,                         
-    MODEL_NAME STRING,                           
-    OCR_SCORE FLOAT,                             
-    AMOUNT_SCORE FLOAT,                          
-    AMOUNT_VALUE STRING,                         
-    DISCOUNT_SCORE FLOAT,                       
-    DISCOUNT_VALUE STRING,                       
-    INVOICE_DATE_SCORE FLOAT,                   
-    INVOICE_DATE_VALUE STRING,                                       
-    ITEM_DESCRIPTIONS_SCORE FLOAT,              
-    ITEM_DESCRIPTIONS_VALUE STRING,              
-    PO_NUMBER_SCORE FLOAT,                       
-    PO_NUMBER_VALUE STRING,                      
-    QUANTITY_SCORE FLOAT,                        
-    QUANTITY_VALUE STRING,                       
-    RATE_SCORE FLOAT,                            
-    RATE_VALUE STRING,                           
-    COMMENTS STRING,                             
-    STATUS STRING,                               
-    PROCESSED_TIMESTAMP TIMESTAMP,               
-    PROCESS_START_TIME TIMESTAMP,                
-    PROCESS_END_TIME TIMESTAMP                   
-);
-
-CREATE OR REPLACE TABLE DS_DEV_DB.DOC_AI_SCHEMA.purchase_col_score_failed_history (
-    SCORE_NAME STRING,         
-    SCORE_VALUE FLOAT,          
-    DATE_FAILED TIMESTAMP,      
-    FILENAME STRING,            
-    COMMENTS STRING             
-);
-
-CREATE OR REPLACE TABLE Invoice_Validated (
-    RELATIVEPATH STRING,
-    DELIVERY_DATE_VALUE STRING,
-    ORDER_DATE_VALUE STRING,
-    PO_NUMBER_VALUE STRING,
-    SUB_TOTAL_VALUE STRING,
-    TAX_AMOUNT_VALUE STRING,
-    TOTAL_AMOUNT_VALUE STRING,
-    PROCESS_START_TIME TIMESTAMP,
-    PROCESS_END_TIME TIMESTAMP
-);
-
-CREATE OR REPLACE TABLE Purchase_Validated (
-    RELATIVEPATH STRING,                    
-    AMOUNT_VALUE STRING,                    
-    DISCOUNT_VALUE STRING,                  
-    INVOICE_DATE_VALUE STRING,                              
-    ITEM_DESCRIPTIONS_VALUE STRING,          
-    PO_NUMBER_VALUE STRING,                  
-    QUANTITY_VALUE STRING,                  
-    RATE_VALUE STRING,                      
-    PROCESS_START_TIME TIMESTAMP,           
-    PROCESS_END_TIME TIMESTAMP              
-);
-
-CREATE OR REPLACE TABLE DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (
-    MODEL_NAME VARCHAR(255),         
-    SCORE_NAME VARCHAR(255),         
-    SCORE_VALUE FLOAT              
-);
-
-CREATE OR REPLACE TABLE DS_DEV_DB.DOC_AI_SCHEMA.manual_review_history_log (
-    ID BIGINT AUTOINCREMENT PRIMARY KEY,  
-    FILENAME VARCHAR(255) NOT NULL,       
-    ACTION VARCHAR(100) NOT NULL,         
-    TIMESTAMP TIMESTAMP_NTZ NOT NULL,     
-    USER_NAME VARCHAR(100) DEFAULT CURRENT_USER, 
-    COMMENTS VARCHAR(500) NULL        
-);
-
-INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.MODEL_METADATA (MODEL_NAME, FLATTEN_TABLE, VALIDATED_TABLE, PATTERN, PREDICTION_TYPE)
-VALUES
-    ('INVOICE_MODEL', 'INVOICE_FLATTEN', 'INVOICE_VALIDATED', '%inv-%', 2),
-    ('INVOICE_MODEL', 'INVOICE_FLATTEN', 'INVOICE_VALIDATED', '%INV%', 2),
-    ('INVOICE_MODEL', 'INVOICE_FLATTEN', 'INVOICE_VALIDATED', '%invoice%', 2),
-    ('INVOICE_MODEL', 'INVOICE_FLATTEN', 'INVOICE_VALIDATED', '%Invoice%', 2),
-    ('PURCHASE_MODEL', 'PURCHASE_FLATTEN', 'PURCHASE_VALIDATED', '%Purchase%', 2),
-    ('PURCHASE_MODEL', 'PURCHASE_FLATTEN', 'PURCHASE_VALIDATED', '%PURCHASE%', 2),
-    ('PURCHASE_MODEL', 'PURCHASE_FLATTEN', 'PURCHASE_VALIDATED', '%purchase%', 2);
-
--- INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
--- VALUES
---     ('INVOICE_MODEL', 'DELIVERY_DATE', 0.999),
---     ('INVOICE_MODEL', 'ORDER_DATE', 0.999),
---     ('INVOICE_MODEL', 'PO_NUMBER', 0.999),
---     ('INVOICE_MODEL', 'SUB_TOTAL', 0.998),
---     ('INVOICE_MODEL', 'TAX_AMOUNT', 0.251), 
---     ('INVOICE_MODEL', 'TOTAL_AMOUNT', 0.776),
---     ('INVOICE_MODEL', 'ocrScore', 0.9); 
-
--- INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
--- VALUES
---     ('PURCHASE_MODEL', 'AMOUNT', 0.706),                      
---     ('PURCHASE_MODEL', 'INVOICE_DATE', 1.0),                       
---     ('PURCHASE_MODEL', 'ITEM_DESCRIPTIONS', 1.0),       
---     ('PURCHASE_MODEL', 'PO_NUMBER', 0.945),             
---     ('PURCHASE_MODEL', 'QUANTITY', 1.0),                
---     ('PURCHASE_MODEL', 'RATE', 1.0),                    
---     ('PURCHASE_MODEL', 'ocrScore', 0.887);     
-
-
-INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
-VALUES
-    ('INVOICE_MODEL', 'DELIVERY_DATE', 1),
-    ('INVOICE_MODEL', 'ORDER_DATE', 1),
-    ('INVOICE_MODEL', 'PO_NUMBER', 1),
-    ('INVOICE_MODEL', 'SUB_TOTAL', 1),
-    ('INVOICE_MODEL', 'TAX_AMOUNT', 0.998), 
-    ('INVOICE_MODEL', 'TOTAL_AMOUNT', 0.998),
-    ('INVOICE_MODEL', 'ocrScore', 0.97); 
-
-INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD (MODEL_NAME, SCORE_NAME, SCORE_VALUE)
-VALUES
-    ('PURCHASE_MODEL', 'AMOUNT', 1),                      
-    ('PURCHASE_MODEL', 'INVOICE_DATE', 1),                       
-    ('PURCHASE_MODEL', 'ITEM_DESCRIPTIONS', 1),       
-    ('PURCHASE_MODEL', 'PO_NUMBER', 1),             
-    ('PURCHASE_MODEL', 'QUANTITY', 1),                
-    ('PURCHASE_MODEL', 'RATE', 1),                    
-    ('PURCHASE_MODEL', 'ocrScore', 0.97);   
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.COUNT_PDF_PAGES_PROC()
-RETURNS VARCHAR(16777216)
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.9'
-PACKAGES = ('snowflake-snowpark-python', 'PyPDF2')
-HANDLER = 'count_pages'
-EXECUTE AS OWNER
-AS '
-import snowflake.snowpark as snowpark
-import PyPDF2
+import streamlit as st
+from snowflake.snowpark.context import get_active_session
+import pandas as pd
+import altair as alt
+import pypdfium2 as pdfium
 import os
+import time
+import plotly.graph_objects as go
+from time import sleep
+import plotly.express as px
+from datetime import datetime, timedelta
+
+import plotly.express as px
 from datetime import datetime
 
-def count_pages(session):
-    # Temporary directory for downloading files
-    temp_dir = "/tmp/pdf_files/"
-    os.makedirs(temp_dir, exist_ok=True)
+# Set up the Snowflake session
+session = get_active_session()
 
-    # Stream and table details
-    stream_name = "DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESS_STREAM"
-    temp_table_name = "STREAMDATA_TEMP"
-    current_db = session.sql("SELECT CURRENT_DATABASE()").collect()[0][0]
-    current_schema = session.sql("SELECT CURRENT_SCHEMA()").collect()[0][0]
-    full_temp_table_name = f"{current_db}.{current_schema}.{temp_table_name}"
-    prefilter_table_name = f"{current_db}.{current_schema}.DOCAI_PREFILTER"
-    metadata_table_name = f"{current_db}.{current_schema}.MODEL_METADATA"
+# Database and schema names
+db_name = "DS_DEV_DB"
+schema_name = "DOC_AI_SCHEMA"
 
-    # Step 1: Create a temporary table to store stream data
-    session.sql(f"""
-        CREATE OR REPLACE TABLE {full_temp_table_name} AS
-        SELECT * FROM {stream_name} where metadata$action=''INSERT'';
-    """).collect()
+tables = {
+    "prefilter": "DOCAI_PREFILTER",
+    "extraction": "DOCAI_ORDERFORM_EXTRACTION",
+    "threshold": "SCORE_THRESHOLD",
+    "invoice": {
+        "flattened": "Invoice_Flatten",
+        "validated": "Invoice_Validated",
+        "score_failed": "invoice_col_score_failed_history",
+    },
+    "purchase": {
+        "flattened": "Purchase_Flatten",
+        "validated": "Purchase_Validated",
+        "score_failed": "purchase_col_score_failed_history",
+    },
+}
 
-    # Step 2: Fetch data from the temporary table
-    temp_data = session.sql(f"SELECT * FROM {full_temp_table_name}").collect()
-    if not temp_data:
-        session.sql(f"DROP TABLE IF EXISTS {full_temp_table_name}").collect()
-        return "No files to process in the stream."
+
+
+# Create a temporary directory for PDFs if it doesn't exist
+TEMP_DIR = "/tmp/pdf_files/"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+# App title and layout
+st.set_page_config(page_title="DocAI Dashboard", layout="wide")
+
+
+# Define section functions
+def I_dashboard_section():
+    st.title("📊 Invoice Dashboard")
+    st.header("Invoice Processing Status")
+
+def P_dashboard_section():
+    st.title("📊 Purchase Dashboard")
+    st.header("Purchase Processing Status")
+
+def live_view_logic():
+    st.header("🚀 Live View")
+
+def manual_review_section():
+    st.header("🔍 Manual Review")
+
+def score_threshold_section():
+    st.header("📈 Score Threshold")
+    st.write("Score thresholds and settings.")
+
+def validated_records_section():
+    st.header("✅ Validated Records")
+    st.write("Recent Top 10 Validated Records.")
+
+def metadata_table_selection():
+    st.header("⚙️ MetaData")
+    st.write("MetaData and settings.")
     
-    processed_count = 0
+def welcome_page():
+    st.title("🎉 Welcome to the DocAI System")
+    st.write("""
+        This is the main page of the DocAI Dashboard system. Use the sidebar to navigate.
+        - Select a Model (e.g., **INVOICE MODEL** or **PURCHASED MODEL**).
+        - Explore the dashboard options.
+    """)
 
-    for row in temp_data:
-        file_name = row["RELATIVE_PATH"].split("/")[-1]  # Extract the file name
-        file_size = row["SIZE"]
-        stage_file_path = f"@INVOICE_DOCS/{row[''RELATIVE_PATH'']}"
-        process_start_time = datetime.now()
+# Sidebar setup
+st.sidebar.title("DocAI Navigation")
 
-        # Step 3: Determine MODEL_NAME dynamically from metadata
-        normalized_file_name = file_name.lower()
-        
-        # Match MODEL_NAME dynamically using case-insensitive LIKE
-        metadata_query = f"""
-            SELECT MODEL_NAME 
-            FROM {metadata_table_name}
-            WHERE LOWER(''{normalized_file_name}'') LIKE LOWER(PATTERN)
-            LIMIT 1
-        """
-        metadata_result = session.sql(metadata_query).collect()
-        
-        # Fallback to UNKNOWN if no match is found
-        if metadata_result:
-            model_name = metadata_result[0]["MODEL_NAME"]
+form_selection = st.sidebar.selectbox("Select Model", ["SELECT MODEL", "INVOICE MODEL", "PURCHASED MODEL"], index=0)
+
+# Step 3: Initialize session state
+if "selected_tab" not in st.session_state:
+    st.session_state["selected_tab"] = None
+
+# Always initialize selected_tab to avoid NameError
+selected_tab = st.session_state["selected_tab"]
+
+
+if form_selection == "INVOICE MODEL":
+    st.sidebar.markdown("### 🧭 Invoice Model Navigation")
+
+    menu_options = {
+        "Dashboard": {"icon": "📊", "function": I_dashboard_section},
+        "Live view": {"icon": "🚀", "function": live_view_logic},
+        "Manual Review": {"icon": "🔍", "function": manual_review_section},
+        "Score Threshold": {"icon": "📈", "function": score_threshold_section},
+        "Validated Records": {"icon": "✅", "function": validated_records_section},
+        "Settings": {"icon": "⚙️", "function": metadata_table_selection}
+    }
+    
+    # Render sidebar menu items
+    for tab, data in menu_options.items():
+        if st.sidebar.button(f"{data['icon']} {tab}"):
+            st.session_state["selected_tab"] = tab
+    
+    # Check the selected tab and execute the corresponding function
+    if st.session_state["selected_tab"] in menu_options:
+        selected_tab = st.session_state["selected_tab"]
+        menu_options[selected_tab]["function"]()
+    else:
+        st.info("Please select an option from the sidebar.")
+
+elif form_selection == "PURCHASED MODEL":
+    st.sidebar.markdown("### 🚚 Purchase Model Navigation")
+
+    # Define menu options for Purchased Model
+    menu_options = {
+        "Dashboard": {"icon": "📊", "function": P_dashboard_section},
+        "Live view": {"icon": "🚀", "function": live_view_logic},
+        "Manual Review": {"icon": "🔍", "function": manual_review_section},
+        "Score Threshold": {"icon": "📈", "function": score_threshold_section},
+        "Validated Records": {"icon": "✅", "function": validated_records_section},
+        "Settings": {"icon": "⚙️", "function": metadata_table_selection}
+    }
+
+    # Render sidebar menu items
+    for tab, data in menu_options.items():
+        if st.sidebar.button(f"{data['icon']} {tab}"):
+            st.session_state["selected_tab"] = tab
+    
+    # Check the selected tab and execute the corresponding function
+    if st.session_state["selected_tab"] in menu_options:
+        selected_tab = st.session_state["selected_tab"]
+        menu_options[selected_tab]["function"]()
+    else:
+        st.info("Please select an option from the sidebar.")
+else:
+    # Default welcome page when "Select Model" is selected
+    st.session_state["selected_tab"] = None  # Reset selected_tab
+    welcome_page()
+
+def get_table_name(table_key, category=None):
+    if category:
+        # Return table name for nested categories like "invoice" or "purchase"
+        return f"{db_name}.{schema_name}.{tables[category][table_key]}"
+    else:
+        # Return table name for top-level keys
+        return f"{db_name}.{schema_name}.{tables[table_key]}"
+
+
+# PDF Viewer Helper Functions
+def list_stage_files(stage_name):
+    try:
+        stage_name = stage_name.strip('@').upper()
+        list_query = f"LIST @{stage_name}"
+        result = session.sql(list_query).collect()
+        pdf_files = [row['name'].split('/')[-1] for row in result 
+                     if row['name'].lower().endswith('.pdf')]
+        return pdf_files
+    except Exception as e:
+        st.error(f"Error listing files from stage: {str(e)}")
+        return []
+
+def load_pdf(sel_doc, stage_name):
+    try:
+        stage_name = stage_name.strip('@').upper()
+        stage_path = f"@{stage_name}/{sel_doc}"
+        local_file_path = os.path.join(TEMP_DIR, sel_doc)
+        session.file.get(stage_path, TEMP_DIR)
+        if os.path.exists(local_file_path):
+            pdf = pdfium.PdfDocument(local_file_path)
+            st.session_state["pdf_doc"] = pdf
+            st.session_state["pdf_page"] = 0
+            st.session_state["pdf_path"] = local_file_path
+            return True
         else:
-            model_name = "UNKNOWN"
-            session.sql(f"""
-                UPDATE {prefilter_table_name}
-                SET STATUS = ''SKIPPED'',
-                    COMMENT = ''File skipped: Unknown file type.'',
-                    MODEL_NAME = ''UNKNOWN''
-                WHERE FILENAME = ''{file_name}''
-            """).collect()
-            continue  # Skip to the next file
+            st.error(f"File not found at {local_file_path}")
+            return False
+    except Exception as e:
+        st.error(f"Error loading PDF: {str(e)}")
+        return False
 
-        # Step 4: Skip files with size 0 bytes
-        if file_size == 0:
-            session.sql(f"""
-                INSERT INTO {prefilter_table_name} (
-                    MODEL_NAME, FILENAME, FILESIZE, NUMBER_OF_PAGES, DATECREATED, COMMENT, STATUS, PROCESS_START_TIME, PROCESS_END_TIME
-                ) VALUES (
-                    ''{model_name}'', ''{file_name}'', {file_size}, NULL, CURRENT_TIMESTAMP,
-                    ''File size is 0 bytes.'', ''SKIPPED'', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-            """).collect()
-            continue
-
-        try:
-            # Step 5: Insert or update prefilter table for processing
-            session.sql(f"""
-                INSERT INTO {prefilter_table_name} (
-                    MODEL_NAME, FILENAME, FILESIZE, NUMBER_OF_PAGES, DATECREATED, COMMENT, STATUS, PROCESS_START_TIME
-                ) SELECT 
-                    ''{model_name}'', ''{file_name}'', {file_size}, NULL, CURRENT_TIMESTAMP,
-                    ''Validated Successfully'', ''NOT PROCESSED'', CURRENT_TIMESTAMP
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM {prefilter_table_name} WHERE FILENAME = ''{file_name}''
-                )
-            """).collect()
-
-            # Step 6: Download the file from the stage and count pages
-            session.file.get(stage_file_path, temp_dir)
-            local_file_path = os.path.join(temp_dir, file_name)
-            
-            if not os.path.exists(local_file_path):
-                raise FileNotFoundError(f"File {file_name} not found.")
-
-            with open(local_file_path, "rb") as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                total_pages = len(pdf_reader.pages)
-
-            # Update the prefilter table with page count
-            process_end_time = datetime.now()
-            session.sql(f"""
-                UPDATE {prefilter_table_name}
-                SET 
-                    NUMBER_OF_PAGES = {total_pages},
-                    STATUS = ''NOT PROCESSED'',
-                    COMMENT = ''Page count updated successfully.'',
-                    PROCESS_END_TIME = CURRENT_TIMESTAMP
-                WHERE FILENAME = ''{file_name}''
-            """).collect()
-
-        except Exception as e:
-            # Handle errors during file processing
-            process_end_time = datetime.now()
-            session.sql(f"""
-                UPDATE {prefilter_table_name}
-                SET STATUS = ''ERROR'',
-                    COMMENT = ''Processing failed: {str(e)}''
-                WHERE FILENAME = ''{file_name}''
-            """).collect()
-        
-        finally:
-            # Clean up the local file
-            if os.path.exists(local_file_path):
-                os.remove(local_file_path)
-
-        processed_count += 1
-
-    # Step 7: Drop the temporary table
-    session.sql(f"DROP TABLE IF EXISTS {full_temp_table_name}").collect()
-    return f"Processed a total of {processed_count} files successfully."
-';
-
-
--- CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.HANDLE_PDF_FILES()
--- RETURNS VARCHAR(16777216)
--- LANGUAGE PYTHON
--- RUNTIME_VERSION = '3.8'
--- PACKAGES = ('snowflake-snowpark-python')
--- HANDLER = 'main'
--- EXECUTE AS OWNER
--- AS '
--- from snowflake.snowpark.session import Session
--- from snowflake.snowpark.exceptions import SnowparkSQLException
--- from datetime import datetime
-
--- def main(session: Session) -> str:
---     try:
---         # Query to fetch all files with `NOT PROCESSED` status
---         get_file_name_query = """
---             SELECT 
---                 FILENAME, 
---                 ROWID, 
---                 CAST(FILESIZE AS FLOAT) AS FILESIZE, 
---                 CAST(NUMBER_OF_PAGES AS INT) AS NUMBER_OF_PAGES
---             FROM DOCAI_PREFILTER
---             WHERE STATUS = ''NOT PROCESSED''
---         """
-        
---         # Execute the query
---         rows = session.sql(get_file_name_query).collect()
-        
---         # Check if there are records to process
---         if not rows:
---             return "No files to process."
-
---         for row in rows:
---             file_name = row["FILENAME"]
---             row_id = row["ROWID"]
---             file_size_mb = row["FILESIZE"] / (1024 * 1024)  # Convert bytes to MB
---             number_of_pages = row["NUMBER_OF_PAGES"]
-
---             # Update status to IN PROGRESS
---             session.sql(f"""
---                 UPDATE DOCAI_PREFILTER
---                 SET STATUS = ''IN PROGRESS'',
---                     COMMENT = ''Processing in progress.''
---                 WHERE ROWID = ''{row_id}''
---             """).collect()
-
---             try:
---                 # Record the start time for processing
---                 process_start_time = session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-
---                 # Query metadata table to determine model and prediction type
---                 metadata_query = f"""
---                     SELECT MODEL_NAME, PREDICTION_TYPE
---                     FROM DS_DEV_DB.DOC_AI_SCHEMA.MODEL_METADATA
---                     WHERE LOWER(''{file_name}'') LIKE LOWER(PATTERN)
---                     LIMIT 1
---                 """
---                 metadata_result = session.sql(metadata_query).collect()
-
---                 # If no matching metadata found, skip the file
---                 if not metadata_result:
---                     session.sql(f"""
---                         UPDATE DOCAI_PREFILTER
---                         SET STATUS = ''SKIPPED'',
---                             COMMENT = ''No matching metadata pattern found.'',
---                             PROCESS_END_TIME = CURRENT_TIMESTAMP
---                         WHERE ROWID = ''{row_id}''
---                     """).collect()
---                     continue
-
---                 # Extract model details
---                 model_name = metadata_result[0]["MODEL_NAME"]
---                 prediction_type = metadata_result[0]["PREDICTION_TYPE"]
-
---                 # Process files meeting criteria
---                 json_result = session.sql(f"""
---                     SELECT DS_DEV_DB.DOC_AI_SCHEMA.{model_name}!PREDICT(
---                         GET_PRESIGNED_URL(@INVOICE_DOCS, ''{file_name}''), {prediction_type}
---                     )
---                 """).collect()[0][0]
-
---                 # Insert into extraction table
---                 session.sql(f"""
---                     INSERT INTO DocAI_OrderForm_Extraction (
---                         RelativePath, Model_Name, Size, File_Url, JSON, Comments, Status, PROCESS_START_TIME, PROCESS_END_TIME
---                     )
---                     SELECT 
---                         ''{file_name}'' AS RelativePath, 
---                         ''{model_name}'' AS Model_Name,
---                         {row["FILESIZE"]} AS Size, 
---                         GET_PRESIGNED_URL(@INVOICE_DOCS, ''{file_name}'') AS File_Url, 
---                         PARSE_JSON(''{json_result}'') AS JSON,
---                         ''File processed successfully.'' AS Comments,
---                         ''NOT PROCESSED'' AS Status,
---                         ''{process_start_time}'' AS PROCESS_START_TIME,
---                         CURRENT_TIMESTAMP AS PROCESS_END_TIME
---                 """).collect()
-
---                 # Update status to PROCESSED
---                 session.sql(f"""
---                     UPDATE DOCAI_PREFILTER
---                     SET STATUS = ''PROCESSED'',
---                         COMMENT = ''File processed and moved to DocAI_OrderForm_Extraction.''
---                     WHERE ROWID = ''{row_id}''
---                 """).collect()
-
---             except Exception as e:
---                 # Log error in extraction table
---                 session.sql(f"""
---                     INSERT INTO DocAI_OrderForm_Extraction (
---                         RelativePath, Model_Name, Size, File_Url, JSON, Comments, Status, PROCESS_START_TIME, PROCESS_END_TIME
---                     )
---                     SELECT 
---                         ''{file_name}'' AS RelativePath, 
---                         NULL AS Model_Name,
---                         {row["FILESIZE"]} AS Size, 
---                         NULL AS File_Url, 
---                         NULL AS JSON, 
---                         ''Processing failed: {str(e)}'' AS Comments,
---                         ''ERROR'' AS Status,
---                         ''{process_start_time}'' AS PROCESS_START_TIME,
---                         CURRENT_TIMESTAMP AS PROCESS_END_TIME
---                     """).collect()
---                 raise e
-
---         return "Files processed successfully."
-
---     except SnowparkSQLException as e:
---         return f"SQL Error: {str(e)}"
---     except Exception as e:
---         return f"General Error: {str(e)}"
--- ';
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.HANDLE_PDF_FILES()
-RETURNS VARCHAR(16777216)
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.8'
-PACKAGES = ('snowflake-snowpark-python')
-HANDLER = 'main'
-EXECUTE AS OWNER
-AS '
-from snowflake.snowpark.session import Session
-from snowflake.snowpark.exceptions import SnowparkSQLException
-from datetime import datetime
-
-def main(session: Session) -> str:
+def display_pdf_page():
     try:
-        # Query to fetch all files with `NOT PROCESSED` status
-        get_file_name_query = """
-            SELECT 
-                FILENAME, 
-                ROWID, 
-                CAST(FILESIZE AS FLOAT) AS FILESIZE, 
-                CAST(NUMBER_OF_PAGES AS INT) AS NUMBER_OF_PAGES
-            FROM DOCAI_PREFILTER
-            WHERE STATUS = ''NOT PROCESSED''
-        """
-        
+        if "pdf_doc" not in st.session_state:
+            return
+        pdf_doc = st.session_state["pdf_doc"]
+        page_num = st.session_state["pdf_page"]
+        page = pdf_doc[page_num]
+        bitmap = page.render(scale=2)
+        pil_image = bitmap.to_pil()
+        st.image(pil_image, use_column_width=True)
+    except Exception as e:
+        st.error(f"Error displaying PDF page: {str(e)}")
+
+def cleanup_temp_files():
+    try:
+        if "pdf_path" in st.session_state:
+            pdf_path = st.session_state["pdf_path"]
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
+    except Exception as e:
+        st.error(f"Error cleaning up temp files: {str(e)}")
+
+def fetch_table_data(query):
+    with st.spinner("Fetching data..."):
+        return session.sql(query).to_pandas()
+
+def fetch_table_data_count(query):
+    try:
+        result = session.sql(query).collect()
+        if result and len(result) > 0:
+            return result[0][0]
+        return 0
+    except Exception as e:
+        st.error(f"Error executing query: {str(e)}")
+        return 0
+
+
+def next_pdf_page():
+    if "pdf_doc" in st.session_state and st.session_state["pdf_page"] + 1 < len(st.session_state["pdf_doc"]):
+        st.session_state["pdf_page"] += 1
+
+def previous_pdf_page():
+    if "pdf_doc" in st.session_state and st.session_state["pdf_page"] > 0:
+        st.session_state["pdf_page"] -= 1
+
+
+# Dashboard section
+def I_dashboard_section():
+
+    # Get current time and calculate the range for the last 30 days
+    now = datetime.now()
+    last_30_days = now - timedelta(days=30)
+
+
+    # Display the static time range as a grey box
+    st.markdown(
+        f"""
+        <div style="
+            background-color: #d9d9d9; 
+            color: #333; 
+            border: 1px solid #ccc; 
+            border-radius: 5px; 
+            padding: 4px 8px; 
+            font-size: 12px; 
+            display: inline-block; 
+            position: relative; 
+            margin : 30px auto 20px auto ;
+            box-shadow: 1px 1px 3px #ddd;">
+            <strong>Time Range:</strong> {last_30_days.strftime('%Y-%m-%d %H:%M:%S')} - {now.strftime('%Y-%m-%d %H:%M:%S')}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+    # Table name
+    prefilter_table = get_table_name("prefilter")
+
+    # Query for the last 30 days
+    query_status = f"""
+    SELECT STATUS, COUNT(*) AS COUNT
+    FROM {prefilter_table}
+    WHERE DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+          AND DATECREATED <= '{now.strftime('%Y-%m-%d %H:%M:%S')}'
+    GROUP BY STATUS
+    """
+
+    # Fetch data for the last 24 hours
+    status_df = fetch_table_data(query_status)
+
+    if not status_df.empty:
+        # Replace status for better display and standardize case
+        status_df["STATUS"] = status_df["STATUS"].str.title()  # Convert to Title Case
+
+        # Replace specific values for better clarity
+        status_df["STATUS"] = status_df["STATUS"].replace({"Failed": "Manual Review"})
+        status_df["STATUS"] = status_df["STATUS"].replace({"Manual_Review": "Manual Review"})
+
+        # Define color mapping for statuses
+        color_mapping = {
+            "Processed": "#006400",
+            "Not Processed": "#ffc107",
+            "Manual Review": "#4285F4",
+            "Skipped": "#C0C0C0",
+            "In Progress": "yellow",
+            "Error": "red"
+        }
+
+        # Ensure all statuses are included in the color mapping
+        missing_statuses = set(status_df["STATUS"]) - set(color_mapping.keys())
+        if missing_statuses:
+            st.warning(f"Missing color mapping for: {', '.join(missing_statuses)}")
+
+        # Add a new color column based on the STATUS
+        status_df["COLOR"] = status_df["STATUS"].map(color_mapping).fillna("gray")  # Default to gray for unmapped statuses
+
+        # Create a pie chart with dynamic colors
+        pie_chart = alt.Chart(status_df).mark_arc().encode(
+            theta=alt.Theta(field="COUNT", type="quantitative"),
+            color=alt.Color(
+                "STATUS:N",  # Encode color based on STATUS
+                scale=alt.Scale(
+                    domain=list(color_mapping.keys()),  # Define the statuses
+                    range=list(color_mapping.values())  # Define corresponding colors
+                )
+            ),
+            tooltip=["STATUS", "COUNT"]  # Add tooltips for more details
+        ).properties(
+            title="Status Distribution (Last 30 Days)"
+        )
+
+        # Display the chart
+        st.altair_chart(pie_chart, use_container_width=True)
+    else:
+        st.info("No data available for the selected time range.")
+
+
+    # Fetch failed records and display bar chart
+    st.subheader("Failed Records Analysis")
+
+    fetch_failed_query = f"""
+        SELECT SCORE_NAME, COUNT(*) AS FAILURE_COUNT, MAX(SCORE_VALUE) AS SCORE_VALUE
+        FROM {get_table_name("score_failed", "invoice")}
+        GROUP BY SCORE_NAME
+        ORDER BY FAILURE_COUNT DESC;
+    """
+
+    failed_df = fetch_table_data(fetch_failed_query)
+    
+    if not failed_df.empty:
+        # Ensure data types
+        failed_df["SCORE_NAME"] = failed_df["SCORE_NAME"].astype(str)
+        failed_df["FAILURE_COUNT"] = pd.to_numeric(failed_df["FAILURE_COUNT"], errors="coerce")
+    
+        # Dynamically calculate the chart height
+        bar_chart_height = max(400, len(failed_df) * 50)  # Minimum height of 400px, 50px per record
+    
+        # Enhanced Bar Chart with Dynamic Spacing
+        bar_chart = alt.Chart(failed_df).mark_bar(size=25, color="steelblue").encode(
+            y=alt.Y(
+                "SCORE_NAME:N",
+                sort="ascending",  # Sort alphabetically by SCORE_NAME
+                title="Score Name",
+                axis=alt.Axis(labelFontSize=12, titleFontSize=14)
+            ),
+            x=alt.X(
+                "FAILURE_COUNT:Q",
+                title="Failure Count",
+                axis=alt.Axis(labelFontSize=12, titleFontSize=14),
+                scale=alt.Scale(domain=[0, failed_df["FAILURE_COUNT"].max() + 5])  # Padding for better visibility
+            ),
+            tooltip=[
+                alt.Tooltip("SCORE_NAME:N", title="Score Name"),
+                alt.Tooltip("FAILURE_COUNT:Q", title="Failure Count"),
+                alt.Tooltip("SCORE_VALUE:Q", title="Score Value", format=".2f")
+            ]
+        ).properties(
+            title=alt.TitleParams(
+                text="Failure Counts by Score Name",
+                fontSize=16,
+                anchor="start"
+            ),
+            width=1000,  # Adjust width for better readability
+            height=bar_chart_height  # Dynamically calculated height
+        ).configure_axis(
+            grid=True,  # Add grid lines for better readability
+            gridDash=[4, 4],  # Dashed grid lines
+            gridColor="lightgray"  # Light gray grid color
+        ).configure_view(
+            strokeOpacity=0  # Remove the border around the chart
+        )
+    
+        # Display bar chart
+        st.altair_chart(bar_chart, use_container_width=True)
+    else:
+        st.info("No data available in col_score_failed_history.")
+
+
+# Dashboard section
+def P_dashboard_section():
+    # Get current time and calculate the range for the last 30 days
+    now = datetime.now()
+    last_30_days = now - timedelta(days=30)
+
+
+    # Display the static time range as a grey box
+    st.markdown(
+        f"""
+        <div style="
+            background-color: #d9d9d9; 
+            color: #333; 
+            border: 1px solid #ccc; 
+            border-radius: 5px; 
+            padding: 4px 8px; 
+            font-size: 12px; 
+            display: inline-block; 
+            position: relative; 
+            margin : 30px auto 20px auto ;
+            box-shadow: 1px 1px 3px #ddd;">
+            <strong>Time Range:</strong> {last_30_days.strftime('%Y-%m-%d %H:%M:%S')} - {now.strftime('%Y-%m-%d %H:%M:%S')}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+    # Table name
+    prefilter_table = get_table_name("prefilter")
+
+    # Query for the last 30 days
+    query_status = f"""
+    SELECT STATUS, COUNT(*) AS COUNT
+    FROM {prefilter_table}
+    WHERE DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+          AND DATECREATED <= '{now.strftime('%Y-%m-%d %H:%M:%S')}'
+    GROUP BY STATUS
+    """
+
+    # Fetch data for the last 24 hours
+    status_df = fetch_table_data(query_status)
+
+    if not status_df.empty:
+        # Replace status for better display and standardize case
+        status_df["STATUS"] = status_df["STATUS"].str.title()  # Convert to Title Case
+
+        # Replace specific values for better clarity
+        status_df["STATUS"] = status_df["STATUS"].replace({"Failed": "Manual Review"})
+        status_df["STATUS"] = status_df["STATUS"].replace({"Manual_Review": "Manual Review"})
+
+        # Define color mapping for statuses
+        color_mapping = {
+            "Processed": "#006400",
+            "Not Processed": "#ffc107",
+            "Manual Review": "#4285F4",
+            "Skipped": "#C0C0C0",
+            "In Progress": "yellow",
+            "Error": "red"
+        }
+
+        # Ensure all statuses are included in the color mapping
+        missing_statuses = set(status_df["STATUS"]) - set(color_mapping.keys())
+        if missing_statuses:
+            st.warning(f"Missing color mapping for: {', '.join(missing_statuses)}")
+
+        # Add a new color column based on the STATUS
+        status_df["COLOR"] = status_df["STATUS"].map(color_mapping).fillna("gray")  # Default to gray for unmapped statuses
+
+        # Create a pie chart with dynamic colors
+        pie_chart = alt.Chart(status_df).mark_arc().encode(
+            theta=alt.Theta(field="COUNT", type="quantitative"),
+            color=alt.Color(
+                "STATUS:N",  # Encode color based on STATUS
+                scale=alt.Scale(
+                    domain=list(color_mapping.keys()),  # Define the statuses
+                    range=list(color_mapping.values())  # Define corresponding colors
+                )
+            ),
+            tooltip=["STATUS", "COUNT"]  # Add tooltips for more details
+        ).properties(
+            title="Status Distribution (Last 30 Days)"
+        )
+
+        # Display the chart
+        st.altair_chart(pie_chart, use_container_width=True)
+    else:
+        st.info("No data available for the selected time range.")
+
+    # Fetch failed records and display bar chart
+    st.subheader("Failed Records Analysis")
+
+    fetch_failed_query = f"""
+        SELECT SCORE_NAME, COUNT(*) AS FAILURE_COUNT, MAX(SCORE_VALUE) AS SCORE_VALUE
+        FROM {get_table_name("score_failed", "purchase")}
+        GROUP BY SCORE_NAME
+        ORDER BY FAILURE_COUNT DESC;
+    """
+
+    
+    failed_df = fetch_table_data(fetch_failed_query)
+    
+    if not failed_df.empty:
+        # Ensure data types
+        failed_df["SCORE_NAME"] = failed_df["SCORE_NAME"].astype(str)
+        failed_df["FAILURE_COUNT"] = pd.to_numeric(failed_df["FAILURE_COUNT"], errors="coerce")
+    
+        # Dynamically calculate the chart height
+        bar_chart_height = max(400, len(failed_df) * 50)  # Minimum height of 400px, 50px per record
+    
+        # Enhanced Bar Chart with Dynamic Spacing
+        bar_chart = alt.Chart(failed_df).mark_bar(size=25, color="steelblue").encode(
+            y=alt.Y(
+                "SCORE_NAME:N",
+                sort="ascending",  # Sort alphabetically by SCORE_NAME
+                title="Score Name",
+                axis=alt.Axis(labelFontSize=12, titleFontSize=14)
+            ),
+            x=alt.X(
+                "FAILURE_COUNT:Q",
+                title="Failure Count",
+                axis=alt.Axis(labelFontSize=12, titleFontSize=14),
+                scale=alt.Scale(domain=[0, failed_df["FAILURE_COUNT"].max() + 5])  # Padding for better visibility
+            ),
+            tooltip=[
+                alt.Tooltip("SCORE_NAME:N", title="Score Name"),
+                alt.Tooltip("FAILURE_COUNT:Q", title="Failure Count"),
+                alt.Tooltip("SCORE_VALUE:Q", title="Score Value", format=".2f")
+            ]
+        ).properties(
+            title=alt.TitleParams(
+                text="Failure Counts by Score Name",
+                fontSize=16,
+                anchor="start"
+            ),
+            width=1000,  # Adjust width for better readability
+            height=bar_chart_height  # Dynamically calculated height
+        ).configure_axis(
+            grid=True,  # Add grid lines for better readability
+            gridDash=[4, 4],  # Dashed grid lines
+            gridColor="lightgray"  # Light gray grid color
+        ).configure_view(
+            strokeOpacity=0  # Remove the border around the chart
+        )
+    
+        # Display bar chart
+        st.altair_chart(bar_chart, use_container_width=True)
+    else:
+        st.info("No data available in col_score_failed_history.")
+
+def fetch_table_data1(query):
+    try:
+        # Get the active Snowflake session
+        session = get_active_session()
+
         # Execute the query
-        rows = session.sql(get_file_name_query).collect()
+        result = session.sql(query).collect()
+
+        # Extract the count from the query result
+        if result and len(result) > 0:
+            return result[0][0]  # Assuming the count is in the first row, first column
+        return 0  # Return 0 if no result is found
+
+    except Exception as e:
+        print(f"Error executing query: {str(e)}")
+        return 0  # Return 0 in case of error
+
+def create_pipeline_chart(stages, manual_stage, extraction_failed_stage):
+    # Create the pipeline chart
+    fig = go.Figure()
+
+    # Add primary pipeline stages
+    for stage in stages:
+        fig.add_shape(
+            type="rect",
+            x0=stage["x0"],
+            y0=stage["y0"],
+            x1=stage["x1"],
+            y1=stage["y1"],
+            line=dict(color="white"),
+            fillcolor=stage["color"],
+        )
+        fig.add_annotation(
+            x=(stage["x0"] + stage["x1"]) / 2,
+            y=(stage["y0"] + stage["y1"]) / 2,
+            text=f"<b style='font-size:30px'>{stage['icon']}</b><br><b>{stage['name']}</b>",
+            showarrow=False,
+            font=dict(size=18, color="white"),
+            align="center",
+        )
+
+    # Add manual review stage as a branch
+    fig.add_shape(
+        type="rect",
+        x0=manual_stage["x0"],
+        y0=manual_stage["y0"],
+        x1=manual_stage["x1"],
+        y1=manual_stage["y1"],
+        line=dict(color="white"),
+        fillcolor=manual_stage["color"],
+    )
+    fig.add_annotation(
+        x=(manual_stage["x0"] + manual_stage["x1"]) / 2,
+        y=(manual_stage["y0"] + manual_stage["y1"]) / 2,
+        text=f"<b style='font-size:30px'>{manual_stage['icon']}</b><br><b>{manual_stage['name']}</b>",
+        showarrow=False,
+        font=dict(size=18, color="white"),
+        align="center",
+    )
+
+    # Add arrows between primary stages
+    for i in range(len(stages) - 1):
+        fig.add_annotation(
+            ax=stages[i]["x1"], ay=(stages[i]["y0"] + stages[i]["y1"]) / 2,
+            axref="x", ayref="y",
+            x=stages[i + 1]["x0"], y=(stages[i + 1]["y0"] + stages[i + 1]["y1"]) / 2,
+            xref="x", yref="y",
+            showarrow=True, arrowhead=3, arrowsize=2, arrowwidth=2, arrowcolor="black", opacity=0.8,
+        )
+
+
+
+    # Add extraction failed stage as a branch
+    fig.add_shape(
+        type="rect",
+        x0=extraction_failed_stage["x0"],
+        y0=extraction_failed_stage["y0"],
+        x1=extraction_failed_stage["x1"],
+        y1=extraction_failed_stage["y1"],
+        line=dict(color="white"),
+        fillcolor=extraction_failed_stage["color"],
+    )
+    fig.add_annotation(
+        x=(extraction_failed_stage["x0"] + extraction_failed_stage["x1"]) / 2,
+        y=(extraction_failed_stage["y0"] + extraction_failed_stage["y1"]) / 2,
+        text=f"<b style='font-size:30px'>{extraction_failed_stage['icon']}</b><br><b>{extraction_failed_stage['name']}</b>",
+        showarrow=False,
+        font=dict(size=18, color="white"),
+        align="center",
+    )
+
+    # Add arrow from Preprocessed to Manual Review
+    fig.add_annotation(
+        ax=(stages[1]["x0"] + stages[1]["x1"]) / 2,  # Horizontal center of Preprocessed
+        ay=stages[1]["y0"],  # Bottom edge of Preprocessed
+        axref="x",
+        ayref="y",
+        x=(manual_stage["x0"] + manual_stage["x1"]) / 2,  # Horizontal center of Manual Review
+        y=manual_stage["y1"],  # Top edge of Manual Review
+        xref="x",
+        yref="y",
+        showarrow=True, arrowhead=3, arrowsize=2, arrowwidth=2, arrowcolor="black",
+        opacity=0.8,
+    )
+
+   # Add arrow from Extraction to Extraction Failed
+    fig.add_annotation(
+        ax=(stages[2]["x0"] + stages[2]["x1"]) / 2,
+        ay=stages[2]["y0"],
+        axref="x",
+        ayref="y",
+        x=(extraction_failed_stage["x0"] + extraction_failed_stage["x1"]) / 2,
+        y=extraction_failed_stage["y1"],
+        xref="x",
+        yref="y",
+        showarrow=True,
+        arrowhead=3,
+        arrowsize=2,
+        arrowwidth=2,
+        arrowcolor="black",
+    )
+    
+    # Update layout with enhanced visuals
+    fig.update_layout(
+        xaxis=dict(range=[-1, 20], visible=False),
+        yaxis=dict(range=[2, 7], visible=False),
+        width=1200,
+        height=500,
+        margin=dict(l=20, r=20, t=20, b=20),
+        paper_bgcolor="rgba(240,248,255,1)",
+        plot_bgcolor="rgba(255,255,255,1)",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+    st.caption("🔄 Dashboard refreshes every 5 seconds.")
+
+    return fig
+
+
+
+def live_view_logic():
+    
+    # Refresh interval (5 minutes = 300 seconds)
+    refresh_interval = 300
+
+    # Calculate the last 30 days range
+    now = datetime.now()
+    last_30_days = now - timedelta(days=30)
+
+    try:
+
+        # Display the time range
+        st.markdown(
+            f"""
+            <div style="
+                background-color: #d9d9d9; 
+                color: #333; 
+                border: 1px solid #ccc; 
+                border-radius: 5px; 
+                padding: 4px 8px; 
+                font-size: 12px; 
+                display: inline-block; 
+                position: relative; 
+                margin : 30px auto 20px auto ;
+                box-shadow: 1px 1px 3px #ddd;">
+                <strong>Time Range:</strong> {last_30_days.strftime('%Y-%m-%d %H:%M:%S')} - {now.strftime('%Y-%m-%d %H:%M:%S')}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        # Determine table references based on selected form
+        if form_selection == "INVOICE MODEL":
+            table_data = tables["invoice"]
+        elif form_selection == "PURCHASED MODEL":
+            table_data = tables["purchase"]
+        else:
+            st.error("Invalid Model selection.")
+            return
+            
+        # Fetch data counts from relevant tables
+        waiting_count = fetch_table_data1(f"SELECT COUNT(*) FROM {tables['prefilter']} WHERE STATUS = 'NOT PROCESSED'")
+        preprocessed_count = fetch_table_data1(f"SELECT COUNT(*) FROM {tables['prefilter']} WHERE STATUS = 'PROCESSED'")
+        manual_review_count = fetch_table_data1(f"SELECT COUNT(*) FROM {tables['prefilter']} WHERE STATUS = 'FAILED'")
+        extraction_count = fetch_table_data1(f"SELECT COUNT(*) FROM {tables['extraction']} WHERE STATUS = 'PROCESSED'")
+        extraction_failed_count = fetch_table_data1(f"SELECT COUNT(*) FROM {table_data['flattened']} WHERE STATUS = 'FAILED'")
+        validated_count = fetch_table_data1(f"SELECT COUNT(*) FROM {table_data['validated']}")
+
+
+        # # Fetch data counts from relevant tables for the last 30 days
+        # waiting_count = fetch_table_data1(f"""
+        #     SELECT COUNT(*) 
+        #     FROM {tables['prefilter']} 
+        #     WHERE STATUS = 'NOT PROCESSED' 
+        #     AND DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+        # """)
+
+        # preprocessed_count = fetch_table_data1(f"""
+        #     SELECT COUNT(*) 
+        #     FROM {tables['prefilter']} 
+        #     WHERE STATUS = 'PROCESSED' 
+        #     AND DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+        # """)
+
+        # manual_review_count = fetch_table_data1(f"""
+        #     SELECT COUNT(*) 
+        #     FROM {tables['prefilter']} 
+        #     WHERE STATUS = 'FAILED' 
+        #     AND DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+        # """)
+
+        # extraction_count = fetch_table_data1(f"""
+        #     SELECT COUNT(*) 
+        #     FROM {tables['extraction']} 
+        #     WHERE STATUS = 'PROCESSED' 
+        #     AND DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+        # """)
+
+        # extraction_failed_count = fetch_table_data1(f"""
+        #     SELECT COUNT(*) 
+        #     FROM {table_data['flattened']} 
+        #     WHERE STATUS = 'FAILED' 
+        #     AND DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+        # """)
+
+        # validated_count = fetch_table_data1(f"""
+        #     SELECT COUNT(*) 
+        #     FROM {table_data['validated']} 
+        #     WHERE DATECREATED >= '{last_30_days.strftime('%Y-%m-%d %H:%M:%S')}'
+        # """)
         
-        # Check if there are records to process
-        if not rows:
-            return "No files to process."
+        # Define colors based on status
+        def get_color(status_count, status_type, is_processed=False, is_completed=False):
+            if is_completed:
+                return "#4285F4"  # SlateBlue for completed
+            elif is_processed and status_count > 0:
+                return "#0F9D58"  # Green for success
+            elif not is_processed and status_count > 0:
+                return "#F4B400"  # Yellow for in-progress
+            else:
+                return "#DB4437"  # Red for not processed
 
-        for row in rows:
-            file_name = row["FILENAME"]
-            row_id = row["ROWID"]
-            file_size_mb = row["FILESIZE"] / (1024 * 1024)  # Convert bytes to MB
-            number_of_pages = row["NUMBER_OF_PAGES"]
+        # Determine the color for each stage
+        extraction_color = get_color(extraction_count, "PROCESSED", is_processed=False, is_completed=(extraction_count == 0))
+        waiting_color = get_color(waiting_count, "NOT PROCESSED", is_processed=False, is_completed=(waiting_count == 0))
+        preprocessed_color = get_color(preprocessed_count, "PROCESSED", is_processed=False, is_completed=(preprocessed_count == 0))
+        #flattened_color = get_color(flattened_count, "Processed", is_processed=True, is_completed=(flattened_count == 0))
+        validated_color = get_color(validated_count, "PROCESSED", is_processed=True, is_completed=(validated_count == 0))
+        manual_review_color = get_color(manual_review_count, "Failed", is_processed=False, is_completed=(manual_review_count == 0))
+        extraction_failed_color = get_color(extraction_failed_count, "FAILED", is_processed=False, is_completed=(extraction_failed_count == 0))
+        
 
+
+        # Define pipeline stages
+        y_position = 5
+        branch_y_position = 3  # For branches
+
+        stages = [
+            {"name": f"{waiting_count} Doc<br>Waiting", "x0": 0, "x1": 3, "y0": y_position, "y1": y_position + 1, "color": waiting_color, "icon": "⏳"},
+            {"name": f"{preprocessed_count} Doc<br>Preprocessed", "x0": 4, "x1": 7, "y0": y_position, "y1": y_position + 1, "color": preprocessed_color, "icon": "⚙️"},
+            {"name": f"{extraction_count} Doc<br>Extraction", "x0": 8, "x1": 11, "y0": y_position, "y1": y_position + 1, "color": extraction_color, "icon": "📂"},
+            #{"name": f"{flattened_count} Doc<br>Flattened", "x0": 12, "x1": 15, "y0": y_position, "y1": y_position + 1, "color": flattened_color, "icon": "📄"},
+            {"name": f"{validated_count} Doc<br>Validated", "x0": 13, "x1": 17, "y0": y_position, "y1": y_position + 1, "color": validated_color, "icon": "✅"},
+        ]
+            
+
+        # Manual review branch
+        manual_stage = {
+            "name": f"{manual_review_count} Sent for<br>Manual Review",
+            "x0": 3.7,
+            "x1": 7.2,
+            "y0": branch_y_position,
+            "y1": branch_y_position + 1,
+            "color": manual_review_color,
+            "icon": "🔍"
+        }
+
+        # Extraction failed branch
+        extraction_failed_stage = {
+            "name": f"{extraction_failed_count} Docs<br>Validation Failed",
+            "x0": 7.5,
+            "x1": 11.5,
+            "y0": branch_y_position,
+            "y1": branch_y_position + 1,
+            "color": extraction_failed_color,
+            "icon": "❌"
+        }
+
+        # Create the pipeline chart
+        
+        fig = create_pipeline_chart(stages, manual_stage, extraction_failed_stage)
+        
+        # Average processing time per table based on selected model
+        queries = {
+            "Preprocessed": f"""
+                SELECT 
+                    SUM(DATEDIFF(second, PROCESS_START_TIME, PROCESS_END_TIME)) AS TOTAL_SECONDS,
+                    COUNT(*) AS TOTAL_RECORDS
+                FROM {tables['prefilter']}
+                WHERE PROCESS_START_TIME IS NOT NULL AND PROCESS_END_TIME IS NOT NULL;
+            """,
+            "Extraction": f"""
+                SELECT 
+                    SUM(DATEDIFF(second, PROCESS_START_TIME, PROCESS_END_TIME)) AS TOTAL_SECONDS,
+                    COUNT(*) AS TOTAL_RECORDS
+                FROM {tables['extraction']}
+                WHERE PROCESS_START_TIME IS NOT NULL AND PROCESS_END_TIME IS NOT NULL;
+            """,
+            "Flattened": f"""
+                SELECT 
+                    SUM(DATEDIFF(second, PROCESS_START_TIME, PROCESS_END_TIME)) AS TOTAL_SECONDS,
+                    COUNT(*) AS TOTAL_RECORDS
+                FROM {table_data['flattened']}
+                WHERE PROCESS_START_TIME IS NOT NULL AND PROCESS_END_TIME IS NOT NULL;
+            """,
+            "Validated": f"""
+                SELECT 
+                    COUNT(*) AS TOTAL_RECORDS, 
+                    SUM(TIMESTAMPDIFF(milliseconds, PROCESS_START_TIME, PROCESS_END_TIME)) AS TOTAL_MILLISECONDS,
+                    CONCAT(
+                        FLOOR(SUM(TIMESTAMPDIFF(milliseconds, PROCESS_START_TIME, PROCESS_END_TIME)) / 60000), ' min ', 
+                        FLOOR((SUM(TIMESTAMPDIFF(milliseconds, PROCESS_START_TIME, PROCESS_END_TIME)) % 60000) / 1000), ' sec ', 
+                        (SUM(TIMESTAMPDIFF(milliseconds, PROCESS_START_TIME, PROCESS_END_TIME)) % 1000), ' ms'
+                    ) AS FORMATTED_TIME
+                FROM {table_data['validated']}
+                WHERE PROCESS_START_TIME IS NOT NULL AND PROCESS_END_TIME IS NOT NULL;
+            """
+
+        }
+
+       # Initialize average times dictionary
+        # Initialize average times dictionary
+        avg_times = {}
+        
+        # Iterate through the queries and execute them
+        for table, query in queries.items():
             try:
-                # Check the file size and number of pages criteria
-                if file_size_mb > 2 and number_of_pages > 10:
-                    # Move files to manual_review stage
-                    session.sql(f"""
-                        COPY FILES INTO @manual_review
-                        FROM @INVOICE_DOCS
-                        FILES = (''{file_name}'')
-                    """).collect()
-
-                    # Update status to MANUAL REVIEW
-                    session.sql(f"""
-                        UPDATE DOCAI_PREFILTER
-                        SET STATUS = ''MANUAL REVIEW'',
-                            COMMENT = ''File moved to manual_review stage as it failed both criteria.'',
-                            PROCESS_END_TIME = CURRENT_TIMESTAMP
-                        WHERE ROWID = ''{row_id}''
-                    """).collect()
-                    continue  # Skip to the next file in the loop
-
-                # Update status to IN PROGRESS
-                session.sql(f"""
-                    UPDATE DOCAI_PREFILTER
-                    SET STATUS = ''IN PROGRESS'',
-                        COMMENT = ''Processing in progress.''
-                    WHERE ROWID = ''{row_id}''
-                """).collect()
-
-                # Record the start time for processing
-                process_start_time = session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-
-                # Query metadata table to determine model and prediction type
-                metadata_query = f"""
-                    SELECT MODEL_NAME, PREDICTION_TYPE
-                    FROM DS_DEV_DB.DOC_AI_SCHEMA.MODEL_METADATA
-                    WHERE LOWER(''{file_name}'') LIKE LOWER(PATTERN)
-                    LIMIT 1
-                """
-                metadata_result = session.sql(metadata_query).collect()
-
-                # If no matching metadata found, skip the file
-                if not metadata_result:
-                    session.sql(f"""
-                        UPDATE DOCAI_PREFILTER
-                        SET STATUS = ''SKIPPED'',
-                            COMMENT = ''No matching metadata pattern found.'',
-                            PROCESS_END_TIME = CURRENT_TIMESTAMP
-                        WHERE ROWID = ''{row_id}''
-                    """).collect()
-                    continue
-
-                # Extract model details
-                model_name = metadata_result[0]["MODEL_NAME"]
-                prediction_type = metadata_result[0]["PREDICTION_TYPE"]
-
-                # Process files meeting criteria
-                json_result = session.sql(f"""
-                    SELECT DS_DEV_DB.DOC_AI_SCHEMA.{model_name}!PREDICT(
-                        GET_PRESIGNED_URL(@INVOICE_DOCS, ''{file_name}''), {prediction_type}
-                    )
-                """).collect()[0][0]
-
-                # Insert into extraction table
-                session.sql(f"""
-                    INSERT INTO DocAI_OrderForm_Extraction (
-                        RelativePath, Model_Name, Size, File_Url, JSON, Comments, Status, PROCESS_START_TIME, PROCESS_END_TIME
-                    )
-                    SELECT 
-                        ''{file_name}'' AS RelativePath, 
-                        ''{model_name}'' AS Model_Name,
-                        {row["FILESIZE"]} AS Size, 
-                        GET_PRESIGNED_URL(@INVOICE_DOCS, ''{file_name}'') AS File_Url, 
-                        PARSE_JSON(''{json_result}'') AS JSON,
-                        ''File processed successfully.'' AS Comments,
-                        ''NOT PROCESSED'' AS Status,
-                        ''{process_start_time}'' AS PROCESS_START_TIME,
-                        CURRENT_TIMESTAMP AS PROCESS_END_TIME
-                """).collect()
-
-                # Update status to PROCESSED
-                session.sql(f"""
-                    UPDATE DOCAI_PREFILTER
-                    SET STATUS = ''PROCESSED'',
-                        COMMENT = ''File processed and moved to DocAI_OrderForm_Extraction.''
-                    WHERE ROWID = ''{row_id}''
-                """).collect()
-
+                # Execute the query
+                result = fetch_table_data(query)  # Replace with your actual query execution function
+        
+                # Safely handle the DataFrame result
+                if isinstance(result, pd.DataFrame) and not result.empty:
+                    if table == "Validated":  # Special handling for Validated table
+                        total_records = result.iloc[0]["TOTAL_RECORDS"] if "TOTAL_RECORDS" in result.columns else 0
+                        total_milliseconds = result.iloc[0]["TOTAL_MILLISECONDS"] if "TOTAL_MILLISECONDS" in result.columns else 0
+                        formatted_time = result.iloc[0]["FORMATTED_TIME"] if "FORMATTED_TIME" in result.columns else "0 min 0 sec 0 ms"
+        
+                        # Add formatted time and seconds to avg_times dictionary
+                        avg_times[table] = {
+                            "seconds": total_milliseconds / 1000 if total_records > 0 else 0,
+                            "formatted": formatted_time,
+                        }
+                    else:
+                        # Standard handling for other tables
+                        total_seconds = result.iloc[0]["TOTAL_SECONDS"] if "TOTAL_SECONDS" in result.columns else 0
+                        total_records = result.iloc[0]["TOTAL_RECORDS"] if "TOTAL_RECORDS" in result.columns else 0
+        
+                        # Calculate average time in seconds
+                        avg_time_seconds = total_seconds / total_records if total_records > 0 else 0
+                        avg_times[table] = avg_time_seconds
+                else:
+                    st.warning(f"No data returned for {table}. Please check the query or data source.")
+                    avg_times[table] = None  # Explicitly set None for tables with no data
             except Exception as e:
-                # Log error in extraction table
-                session.sql(f"""
-                    INSERT INTO DocAI_OrderForm_Extraction (
-                        RelativePath, Model_Name, Size, File_Url, JSON, Comments, Status, PROCESS_START_TIME, PROCESS_END_TIME
-                    )
-                    SELECT 
-                        ''{file_name}'' AS RelativePath, 
-                        NULL AS Model_Name,
-                        {row["FILESIZE"]} AS Size, 
-                        NULL AS File_Url, 
-                        NULL AS JSON, 
-                        ''Processing failed: {str(e)}'' AS Comments,
-                        ''ERROR'' AS Status,
-                        ''{process_start_time}'' AS PROCESS_START_TIME,
-                        CURRENT_TIMESTAMP AS PROCESS_END_TIME
-                """).collect()
+                avg_times[table] = None
+                st.error(f"Error fetching data for {table}: {str(e)}")
+        
+        # Define colors for the bar chart
+        custom_colors = {
+            "Preprocessed": "#1f77b4",  # Blue
+            "Extraction": "#87CEFA",    # Light Blue
+            "Flattened": "#FFCC00",     # Yellow
+            "Validated": "#32CD32",     # Lime Green
+        }
+        
+        # Prepare data for the bar chart
+        chart_data = {
+            "Table": list(avg_times.keys()),
+            "Average Time (Seconds)": [
+                avg_times[table]["seconds"] if isinstance(avg_times[table], dict) else avg_times[table]
+                for table in avg_times.keys()
+            ],
+            "Formatted Time": [
+                avg_times[table]["formatted"] if isinstance(avg_times[table], dict) else ""
+                for table in avg_times.keys()
+            ],
+        }
+        
+        df_chart = pd.DataFrame(chart_data)
+        
+        # Create the bar chart
+        fig_chart = px.bar(
+            df_chart,
+            x="Table",
+            y="Average Time (Seconds)",
+            title="Average Processing Time per Table",
+            text="Formatted Time",  # Display formatted time for Validated table
+            color="Table",  # Use the custom color map for the 'Table' column
+            color_discrete_map=custom_colors,  # Apply custom colors
+        )
+        
+        # Update chart formatting
+        fig_chart.update_traces(texttemplate="%{text}", textposition="outside")
+        fig_chart.update_layout(
+            xaxis_title="Table",
+            yaxis_title="Average Time (Seconds)",
+            font=dict(size=14),
+        )
+        
+        # Render the chart
+        st.plotly_chart(fig_chart, use_container_width=True)
 
-                # Update status in DOCAI_PREFILTER
-                session.sql(f"""
-                    UPDATE DOCAI_PREFILTER
-                    SET STATUS = ''ERROR'',
-                        COMMENT = ''Error during processing: {str(e)}''
-                    WHERE ROWID = ''{row_id}''
-                """).collect()
-                # Log the error and move to the next file
 
-        return "Files processed successfully."
-
-    except SnowparkSQLException as e:
-        return f"SQL Error: {str(e)}"
     except Exception as e:
-        return f"General Error: {str(e)}"
-';
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.MANAGE_MANUAL_REVIEW_FILES()
-
-RETURNS VARCHAR(16777216)
-
-LANGUAGE JAVASCRIPT
-
-EXECUTE AS CALLER
-
-AS '
-
-try {
-
-    // Create temporary table for file tracking
-
-    var create_temp_table = `
-
-        CREATE OR REPLACE TEMPORARY TABLE temp_files_to_move AS
-
-        SELECT FILENAME
-
-        FROM DOCAI_PREFILTER
-
-        WHERE STATUS = ''MANUAL REVIEW''`;
-
-    snowflake.execute({ sqlText: create_temp_table });
-
-    // Check if there are any files to process
-
-    var check_files = `SELECT COUNT(*) AS file_count FROM temp_files_to_move`;
-
-    var files_result = snowflake.execute({ sqlText: check_files });
-
-    files_result.next();
-
-    var file_count = files_result.getColumnValue(1);
-
-    if (file_count === 0) {
-
-        return "No files found with MANUAL_REVIEW status";
-
-    }
-
-    // Get the pattern string for file operations
-
-    var get_pattern = `SELECT LISTAGG(FILENAME, ''|'') FROM temp_files_to_move`;
-
-    var pattern_result = snowflake.execute({ sqlText: get_pattern });
-
-    pattern_result.next();
-
-    var file_pattern = pattern_result.getColumnValue(1);
-
-    // Create the complete pattern string in JavaScript
-
-    var complete_pattern = ''.*('' + file_pattern + '').*'';
-
-    // Copy files to Manual_Review stage
-
-    var copy_files = `COPY FILES INTO @Manual_Review 
-
-                      FROM @INVOICE_DOCS
-
-                      PATTERN = ''${complete_pattern}''`;
-
-    snowflake.execute({ sqlText: copy_files });
-
-    // Remove files from source stage
-
-    var remove_files = `REMOVE @INVOICE_DOCS 
-
-                       PATTERN = ''${complete_pattern}''`;
-
-    snowflake.execute({ sqlText: remove_files });
-
-    // Update status to Failed
-
-    var update_status = `UPDATE DOCAI_PREFILTER
-
-                        SET STATUS = ''FAILED''
-
-                        WHERE STATUS = ''MANUAL REVIEW''
-
-                        AND FILENAME IN (SELECT FILENAME FROM temp_files_to_move)`;
-
-    var update_result = snowflake.execute({ sqlText: update_status });
-
-    // Clean up temporary table
-
-    var cleanup = `DROP TABLE IF EXISTS temp_files_to_move`;
-
-    snowflake.execute({ sqlText: cleanup });
-
-    return `Successfully processed ${file_count} files`;
-
-} catch (err) {
-
-    // Clean up temporary table in case of error
-
-    try {
-
-        snowflake.execute({ sqlText: `DROP TABLE IF EXISTS temp_files_to_move` });
-
-    } catch (cleanup_err) {
-
-        // Ignore cleanup errors
-
-    }
-
-    return `Failed to process files: ${err}`;
-
-}
-
-';
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.LOAD_INVOICE_FLATTEN()
-RETURNS VARCHAR(16777216)
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.8'
-PACKAGES = ('snowflake-snowpark-python')
-HANDLER = 'main'
-EXECUTE AS OWNER
-AS
-$$
-import json
-from snowflake.snowpark.session import Session
-
-class InvoiceProcessor:
-
-    def __init__(self, session):
-        self.session = session
-        self.total_processed = 0
-        self.total_failed = 0
-
-    def check_not_processed_status(self):
-        """
-        Check if there are records with STATUS = 'NOT PROCESSED' in the DocAI_OrderForm_Extraction table.
-        """
-        status_query = """
-            SELECT COUNT(*) AS COUNT
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.DocAI_OrderForm_Extraction
-            WHERE STATUS = 'NOT PROCESSED' AND MODEL_NAME = 'INVOICE_MODEL';
-        """
-        result = self.session.sql(status_query).collect()
-        return result[0]['COUNT'] > 0 if result else False
-
-    def load_thresholds(self):
-        threshold_query = """
-            SELECT SCORE_NAME, CAST(SCORE_VALUE AS FLOAT) AS SCORE_VALUE
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD
-            WHERE MODEL_NAME = 'INVOICE_MODEL'
-        """
-        thresholds = self.session.sql(threshold_query).collect()
-        if not thresholds:
-            raise ValueError("No thresholds found for the INVOICE_MODEL.")
-        return {row['SCORE_NAME']: row['SCORE_VALUE'] for row in thresholds}
-
-    def load_table_schema(self):
-        schema_query = "DESCRIBE TABLE DS_DEV_DB.DOC_AI_SCHEMA.Invoice_Flatten"
-        schema = self.session.sql(schema_query).collect()
-        return {row['name'].upper() for row in schema}
-
-    def insert_failed_history(self, filename, score_name, score_value, comments):
-        insert_query = f"""
-            INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.invoice_col_score_failed_history (
-                score_name, 
-                score_value, 
-                date_failed, 
-                filename, 
-                comments
-            ) VALUES (
-                '{score_name.replace("'", "''")}', 
-                {score_value}, 
-                CURRENT_TIMESTAMP, 
-                '{filename.replace("'", "''")}', 
-                '{comments.replace("'", "''")}')
-        """
-        self.session.sql(insert_query).collect()
-
-    def insert_flatten_table(self, record, json_data, ocr_score, failed_fields, start_time, end_time):
-        insert_columns = ["RELATIVEPATH", "MODEL_NAME", "OCR_SCORE"]
-        insert_values = [record["RELATIVEPATH"], "INVOICE_MODEL", ocr_score]
-
-        for field, threshold in self.thresholds.items():
-            if field == "ocrScore":
-                continue
-            field_score_col = f"{field.upper()}_SCORE"
-            field_value_col = f"{field.upper()}_VALUE"
-            if field_score_col in self.valid_columns and field_value_col in self.valid_columns:
-                field_data = json_data.get(field, [])
-                score = field_data[0].get("score", 0) if field_data else 0
-                concatenated_values = ", ".join(
-                    [item.get("value", "").replace("'", "''") for item in field_data]
-                )
-                insert_columns.extend([field_score_col, field_value_col])
-                insert_values.extend([score, concatenated_values])
-
-        status = "FAILED" if failed_fields else "PROCESSED"
-        comments = f"Failed: {', '.join(failed_fields)}" if failed_fields else "All scores passed"
-
-        insert_columns.extend(["STATUS", "COMMENTS", "PROCESSED_TIMESTAMP", "PROCESS_START_TIME", "PROCESS_END_TIME"])
-        insert_values.extend([status, comments, "CURRENT_TIMESTAMP()", start_time, end_time])
-
-        columns = ", ".join(insert_columns)
-        placeholders = ", ".join(
-            ["?" if val != "CURRENT_TIMESTAMP()" else "CURRENT_TIMESTAMP()" for val in insert_values]
+        st.error(f"Error fetching live data: {str(e)}")
+
+    # Refresh the dashboard
+    time.sleep(refresh_interval)
+    st.experimental_rerun()
+
+
+
+# Convert fractional minutes to "X min Y sec" format
+def format_time(time_sec):
+    if time_sec==0:
+        return 0
+    total_seconds = time_sec * 100  # Convert minutes to seconds
+    minutes = total_seconds // 60  # Get whole minutes
+    seconds = total_seconds % 60   # Get remaining seconds
+    return f"{minutes}m {seconds}s"
+
+
+def manual_review_section():
+    # Create tabs for different manual review sections
+    tabs = st.tabs(["DocAIExtract ManualReview", "ScoreField ManualReview"])
+
+    ### Tab 1: DocAI Extract Manual Review
+    with tabs[0]:
+        handle_manual_review(
+            query=f"""
+                SELECT * 
+                FROM {db_name}.{schema_name}.{tables['prefilter']}
+                WHERE STATUS = 'FAILED';
+            """,
+            stage_name="MANUAL_REVIEW",
+            tab_key="DocAIExtract"
         )
-        insert_query = f"INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.Invoice_Flatten ({columns}) VALUES ({placeholders})"
-        self.session.sql(insert_query, [val for val in insert_values if val != "CURRENT_TIMESTAMP()"]).collect()
 
-    def update_extraction_status(self, relative_path, status):
-        update_query = f"""
-            UPDATE DS_DEV_DB.DOC_AI_SCHEMA.DocAI_OrderForm_Extraction
-            SET STATUS = '{status}'
-            WHERE RELATIVEPATH = '{relative_path.replace("'", "''")}'
+    ### Tab 2: Score Failed Manual Review
+    with tabs[1]:
+        st.markdown("## 🛠️ ScoreField Manual Review")
+        st.markdown("---")  # Horizontal line for separation
+
+        # Dynamically fetch the table and stage based on the selected form
+        if form_selection == "INVOICE MODEL":
+            flattened_table = tables['invoice']['flattened']
+            stage_name = "INVOICE_DOCS"
+        elif form_selection == "PURCHASED MODEL":
+            flattened_table = tables['purchase']['flattened']
+            stage_name = "INVOICE_DOCS"
+        else:
+            st.error("Invalid model selection.")
+            return
+
+        # Fetch records from the dynamically determined table
+        query_score_failed = f"""
+        SELECT * FROM {db_name}.{schema_name}.{flattened_table} WHERE status='FAILED';
         """
-        self.session.sql(update_query).collect()
+        score_failed_df = fetch_table_data(query_score_failed)
 
-    def process_record(self, record):
-        try:
-            json_data = json.loads(record['JSON'])
-            self.thresholds = self.load_thresholds()
-            self.valid_columns = self.load_table_schema()
+        if not score_failed_df.empty:
+            st.write(f"### 🚩 Score Failed Records for {flattened_table}")
 
-            process_start_time = self.session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-            ocr_score = float(json_data.get("__documentMetadata", {}).get("ocrScore", 0))
+            # Display the dataframe with formatted style
+            st.dataframe(
+                score_failed_df,
+                hide_index=True,
+                use_container_width=True
+            )
 
-            failed_fields = []
-            if ocr_score < self.thresholds.get("ocrScore", 0):
-                failed_fields.append("OCR_Score")
-                self.insert_failed_history(record["RELATIVEPATH"], "OCR_Score", ocr_score, "OCR_Score failed validation")
+            # Check if the 'RELATIVEPATH' column exists
+            if 'RELATIVEPATH' in score_failed_df.columns:
+                # Get list of unique PDF files
+                pdf_files = score_failed_df['RELATIVEPATH'].unique().tolist()
 
-            for field, threshold in self.thresholds.items():
-                if field == "ocrScore":
-                    continue
-                field_data = json_data.get(field, [])
-                score = field_data[0].get("score", 0) if field_data else 0
-                if score < threshold:
-                    failed_fields.append(field)
-                    self.insert_failed_history(
-                        record["RELATIVEPATH"], field, score, f"{field} failed validation"
-                    )
-
-            process_end_time = self.session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-
-            self.insert_flatten_table(record, json_data, ocr_score, failed_fields, process_start_time, process_end_time)
-
-            self.update_extraction_status(record["RELATIVEPATH"], "PROCESSED")
-            self.total_processed += 1 if not failed_fields else 0
-            self.total_failed += 1 if failed_fields else 0
-
-        except Exception as e:
-            print(f"Error processing record {record['RELATIVEPATH']}: {str(e)}")
-            self.update_extraction_status(record["RELATIVEPATH"], "ERROR")
-            self.total_failed += 1
-
-    def process_all_records(self):
-        records_query = """
-            SELECT RELATIVEPATH, JSON
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.DocAI_OrderForm_Extraction
-            WHERE STATUS = 'NOT PROCESSED' AND MODEL_NAME = 'INVOICE_MODEL';
-        """
-        records = self.session.sql(records_query).collect()
-        if not records:
-            return "No records to process."
-
-        for record in records:
-            self.process_record(record)
-
-        return f"Processed {self.total_processed} records. Failed to process {self.total_failed} records."
-
-def main(session: Session) -> str:
-    processor = InvoiceProcessor(session)
-
-    # Check for "NOT PROCESSED" status
-    if not processor.check_not_processed_status():
-        return "No records with 'NOT PROCESSED' status. Procedure terminated."
-
-    return processor.process_all_records()
-$$;
-
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.LOAD_PURCHASE_FLATTEN()
-RETURNS VARCHAR(16777216)
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.8'
-PACKAGES = ('snowflake-snowpark-python')
-HANDLER = 'main'
-EXECUTE AS OWNER
-AS
-$$
-import json
-from snowflake.snowpark.session import Session
-
-class InvoiceProcessor:
-
-    def __init__(self, session):
-        self.session = session
-        self.total_processed = 0
-        self.total_failed = 0
-
-    def check_not_processed_status(self):
-        """
-        Check if there are records with STATUS = 'NOT PROCESSED' in the DocAI_OrderForm_Extraction table.
-        """
-        status_query = """
-            SELECT COUNT(*) AS COUNT
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.DocAI_OrderForm_Extraction
-            WHERE STATUS = 'NOT PROCESSED' AND MODEL_NAME = 'PURCHASE_MODEL';
-        """
-        result = self.session.sql(status_query).collect()
-        return result[0]['COUNT'] > 0 if result else False
-
-    def load_thresholds(self):
-        threshold_query = """
-            SELECT SCORE_NAME, CAST(SCORE_VALUE AS FLOAT) AS SCORE_VALUE
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.SCORE_THRESHOLD
-            WHERE MODEL_NAME = 'PURCHASE_MODEL'
-        """
-        thresholds = self.session.sql(threshold_query).collect()
-        if not thresholds:
-            raise ValueError("No thresholds found for the PURCHASE_MODEL.")
-        return {row['SCORE_NAME']: row['SCORE_VALUE'] for row in thresholds}
-
-    def load_table_schema(self):
-        schema_query = "DESCRIBE TABLE DS_DEV_DB.DOC_AI_SCHEMA.Purchase_Flatten"
-        schema = self.session.sql(schema_query).collect()
-        return {row['name'].upper() for row in schema}
-
-    def insert_failed_history(self, filename, score_name, score_value, comments):
-        insert_query = f"""
-            INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.purchase_col_score_failed_history (
-                score_name, 
-                score_value, 
-                date_failed, 
-                filename, 
-                comments
-            ) VALUES (
-                '{score_name.replace("'", "''")}', 
-                {score_value}, 
-                CURRENT_TIMESTAMP, 
-                '{filename.replace("'", "''")}', 
-                '{comments.replace("'", "''")}')
-        """
-        self.session.sql(insert_query).collect()
-
-    def insert_flatten_table(self, record, json_data, ocr_score, failed_fields, start_time, end_time):
-        insert_columns = ["RELATIVEPATH", "MODEL_NAME", "OCR_SCORE"]
-        insert_values = [record["RELATIVEPATH"], "PURCHASE_MODEL", ocr_score]
-
-        for field, threshold in self.thresholds.items():
-            if field == "ocrScore":
-                continue
-            field_score_col = f"{field.upper()}_SCORE"
-            field_value_col = f"{field.upper()}_VALUE"
-            if field_score_col in self.valid_columns and field_value_col in self.valid_columns:
-                field_data = json_data.get(field, [])
-                score = field_data[0].get("score", 0) if field_data else 0
-                concatenated_values = ", ".join(
-                    [item.get("value", "").replace("'", "''") for item in field_data]
+                # Add spacing for better layout
+                st.markdown("### 📄 Select a PDF to View")
+                selected_file = st.selectbox(
+                    "Choose a PDF file to view",
+                    options=pdf_files,
+                    index=None,
+                    placeholder="Select a PDF...",
+                    key="select_pdf_scorefield"
                 )
-                insert_columns.extend([field_score_col, field_value_col])
-                insert_values.extend([score, concatenated_values])
 
-        status = "FAILED" if failed_fields else "PROCESSED"
-        comments = f"Failed: {', '.join(failed_fields)}" if failed_fields else "All scores passed"
+                if selected_file:
+                    try:
+                        if "pdf_doc" not in st.session_state or st.session_state.get("current_doc") != selected_file:
+                            cleanup_temp_files()
+                            if load_pdf(selected_file, stage_name):
+                                st.session_state["current_doc"] = selected_file
 
-        insert_columns.extend(["STATUS", "COMMENTS", "PROCESSED_TIMESTAMP", "PROCESS_START_TIME", "PROCESS_END_TIME"])
-        insert_values.extend([status, comments, "CURRENT_TIMESTAMP()", start_time, end_time])
+                        if "pdf_doc" in st.session_state:
+                            st.markdown("### 📂 PDF Viewer")
+                            display_pdf_page()
 
-        columns = ", ".join(insert_columns)
-        placeholders = ", ".join(
-            ["?" if val != "CURRENT_TIMESTAMP()" else "CURRENT_TIMESTAMP()" for val in insert_values]
+                            # Navigation controls
+                            nav_container = st.container()
+                            nav1, nav2, nav3 = nav_container.columns([2, 2, 1])
+
+                            # Previous Button
+                            with nav1:
+                                if st.button("⏮️ Previous", key=f"prev_page_{selected_file}_1"):
+                                    if st.session_state["pdf_page"] > 0:
+                                        st.session_state["pdf_page"] -= 1
+
+                            # Current Page Display
+                            with nav2:
+                                total_pages = len(st.session_state["pdf_doc"])
+                                current_page = st.session_state["pdf_page"] + 1
+                                st.markdown(f"Page **{current_page}** of **{total_pages}**")
+
+                            # Next Button
+                            with nav3:
+                                if st.button("Next ⏭️", key=f"next_page_{selected_file}_1"):
+                                    if st.session_state["pdf_page"] < total_pages - 1:
+                                        st.session_state["pdf_page"] += 1
+                    except Exception as e:
+                        st.error(f"Error loading PDF: {str(e)}")
+            else:
+                st.warning("The column 'RELATIVEPATH' does not exist in the data.")
+        else:
+            st.info(f"No failed records found in the {flattened_table} table.")
+
+
+
+def handle_manual_review(query, stage_name, tab_key):
+    """
+    Handles the manual review logic for each tab.
+    """
+    # Fetch data
+    data_df = fetch_table_data(query)
+
+    if not data_df.empty:
+        st.write(f"### {tab_key} Records")
+
+        # Get unique filenames
+        all_filenames = data_df['FILENAME'].unique().tolist()
+
+        # Add auto-suggest functionality
+        search_query = st.selectbox(
+            "Search or select a PDF file",
+            options=[""] + all_filenames,
+            format_func=lambda x: x if x != "" else "Type to search...",
+            index=None,
+            key=f"file_search_{tab_key}"
         )
-        insert_query = f"INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.Purchase_Flatten ({columns}) VALUES ({placeholders})"
-        self.session.sql(insert_query, [val for val in insert_values if val != "CURRENT_TIMESTAMP()"]).collect()
 
-    def update_extraction_status(self, relative_path, status):
-        update_query = f"""
-            UPDATE DS_DEV_DB.DOC_AI_SCHEMA.DocAI_OrderForm_Extraction
-            SET STATUS = '{status}'
-            WHERE RELATIVEPATH = '{relative_path.replace("'", "''")}'
-        """
-        self.session.sql(update_query).collect()
+        # Filter the DataFrame based on the search query
+        if search_query:
+            filtered_df = data_df[data_df['FILENAME'].str.contains(search_query, case=False)]
+        else:
+            filtered_df = data_df
 
-    def process_record(self, record):
+        # Pagination logic
+        paginate_and_display(filtered_df, tab_key, stage_name)
+    else:
+        st.info(f"No records found for {tab_key}.")
+
+def paginate_and_display(filtered_df, tab_key, stage_name):
+    """
+    Handles pagination and displays records.
+    """
+    records_per_page = 10
+    total_records = len(filtered_df)
+    total_pages = max((total_records + records_per_page - 1) // records_per_page, 1)
+
+    # Initialize session state for pagination
+    if f"current_page_{tab_key}" not in st.session_state:
+        st.session_state[f"current_page_{tab_key}"] = 1
+
+    # Ensure current page is within bounds
+    st.session_state[f"current_page_{tab_key}"] = max(
+        1, min(st.session_state[f"current_page_{tab_key}"], total_pages)
+    )
+
+    # Pagination controls
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        if st.session_state[f"current_page_{tab_key}"] > 1:
+            if st.button("⏮️ Previous", key=f"prev_{tab_key}"):
+                st.session_state[f"current_page_{tab_key}"] -= 1
+    with col2:
+        st.write(f"Page {st.session_state[f'current_page_{tab_key}']} of {total_pages}")
+    with col3:
+        if st.session_state[f"current_page_{tab_key}"] < total_pages:
+            if st.button("Next ⏭️", key=f"next_{tab_key}"):
+                st.session_state[f"current_page_{tab_key}"] += 1
+
+    # Slice the DataFrame for the current page
+    start_idx = (st.session_state[f"current_page_{tab_key}"] - 1) * records_per_page
+    end_idx = min(start_idx + records_per_page, total_records)
+
+    # Paginated DataFrame
+    paginated_df = filtered_df.iloc[start_idx:end_idx]
+    if 'ROWID' in paginated_df.columns:
+        paginated_df = paginated_df.drop(columns=['ROWID'])
+
+    # Display paginated DataFrame
+    st.dataframe(paginated_df, hide_index=True, use_container_width=True)
+
+    # Show PDF viewer
+    show_pdf_viewer(paginated_df, stage_name, tab_key)
+
+
+def show_pdf_viewer(data_df, stage_name, tab_key):
+    """
+    Handles PDF viewing and related actions with proper clickable buttons.
+    """
+    pdf_files = data_df['FILENAME'].unique().tolist()
+    st.write("### Select a PDF to view")
+    selected_file = st.selectbox(
+        "Choose a PDF file",
+        options=pdf_files,
+        index=None if pdf_files else None,
+        placeholder="Select a PDF...",
+        key=f"select_pdf_{tab_key}"
+    )
+
+    if selected_file:
+        col1, col2 = st.columns([2, 2])
+
+        # Add styled buttons using Streamlit's native `button` function
+        with col1:
+            revert_button_clicked = st.button(
+                label="🔄 Send this document for re-processing",
+                key=f"revert_{selected_file}",
+                help="Reprocess this document",
+                use_container_width=True
+            )
+        with col2:
+            ignore_button_clicked = st.button(
+                label="🚫 Remove this document from pipeline",
+                key=f"ignore_{selected_file}",
+                help="Remove this document from the pipeline",
+                use_container_width=True
+            )
+
+        # Handle actions for buttons
+        if revert_button_clicked:
+            process_stage_action(selected_file, stage_name, action="revert")
+        if ignore_button_clicked:
+            process_stage_action(selected_file, stage_name, action="ignore")
+
+        # Display PDF if selected
         try:
-            json_data = json.loads(record['JSON'])
-            self.thresholds = self.load_thresholds()
-            self.valid_columns = self.load_table_schema()
+            if "pdf_doc" not in st.session_state or st.session_state.get("current_doc") != selected_file:
+                cleanup_temp_files()
+                if load_pdf(selected_file, stage_name):
+                    st.session_state["current_doc"] = selected_file
+                    st.session_state["pdf_page"] = 0
 
-            process_start_time = self.session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-            ocr_score = float(json_data.get("__documentMetadata", {}).get("ocrScore", 0))
+            if "pdf_doc" in st.session_state:
+                st.write("### PDF Viewer")
+                display_pdf_page()
 
-            failed_fields = []
-            if ocr_score < self.thresholds.get("ocrScore", 0):
-                failed_fields.append("OCR_Score")
-                self.insert_failed_history(record["RELATIVEPATH"], "OCR_Score", ocr_score, "OCR_Score failed validation")
-
-            for field, threshold in self.thresholds.items():
-                if field == "ocrScore":
-                    continue
-                field_data = json_data.get(field, [])
-                score = field_data[0].get("score", 0) if field_data else 0
-                if score < threshold:
-                    failed_fields.append(field)
-                    self.insert_failed_history(
-                        record["RELATIVEPATH"], field, score, f"{field} failed validation"
-                    )
-
-            process_end_time = self.session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-
-            self.insert_flatten_table(record, json_data, ocr_score, failed_fields, process_start_time, process_end_time)
-
-            self.update_extraction_status(record["RELATIVEPATH"], "PROCESSED")
-            self.total_processed += 1 if not failed_fields else 0
-            self.total_failed += 1 if failed_fields else 0
-
+                # Navigation controls
+                nav_container = st.container()
+                nav1, nav2, nav3 = nav_container.columns([2, 2, 1])
+                with nav1:
+                    if st.button("⏮️ Previous", key=f"prev_page_{selected_file}"):
+                        previous_pdf_page()
+                with nav2:
+                    total_pages = len(st.session_state["pdf_doc"])
+                    current_page = st.session_state["pdf_page"] + 1
+                    st.write(f"Page {current_page} of {total_pages}")
+                with nav3:
+                    if st.button("Next ⏭️", key=f"next_page_{selected_file}"):
+                        next_pdf_page()
         except Exception as e:
-            print(f"Error processing record {record['RELATIVEPATH']}: {str(e)}")
-            self.update_extraction_status(record["RELATIVEPATH"], "ERROR")
-            self.total_failed += 1
-
-    def process_all_records(self):
-        records_query = """
-            SELECT RELATIVEPATH, JSON
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.DocAI_OrderForm_Extraction
-            WHERE STATUS = 'NOT PROCESSED' AND MODEL_NAME = 'PURCHASE_MODEL';
-        """
-        records = self.session.sql(records_query).collect()
-        if not records:
-            return "No records to process."
-
-        for record in records:
-            self.process_record(record)
-
-        return f"Processed {self.total_processed} records. Failed to process {self.total_failed} records."
-
-def main(session: Session) -> str:
-    processor = InvoiceProcessor(session)
-
-    # Check for "NOT PROCESSED" status
-    if not processor.check_not_processed_status():
-        return "No records with 'NOT PROCESSED' status. Procedure terminated."
-
-    return processor.process_all_records()
-$$;
+            st.error(f"Error loading PDF: {str(e)}")
 
 
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.LOAD_INVOICE_VALIDATED()
-RETURNS VARCHAR(16777216)
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.8'
-PACKAGES = ('snowflake-snowpark-python')
-HANDLER = 'main'
-EXECUTE AS OWNER
-AS
-$$
-def main(session):
+
+def process_stage_action(file_name, stage_name, action):
+    """
+    Handles the revert or ignore actions for a file in a specific stage.
+    """
     try:
-        total_processed = 0
+        list_manual_review_query = f"LIST @{stage_name};"
+        manual_review_files = session.sql(list_manual_review_query).collect()
+        stage_filenames = [file['name'].split('/')[-1] for file in manual_review_files]
 
-        # Fetch all processed records from Invoice_Flatten
-        select_query = """
-            SELECT 
-                RELATIVEPATH,
-                DELIVERY_DATE_VALUE,
-                ORDER_DATE_VALUE,
-                PO_NUMBER_VALUE,
-                SUB_TOTAL_VALUE,
-                TAX_AMOUNT_VALUE,
-                TOTAL_AMOUNT_VALUE,
-                PROCESS_START_TIME,
-                PROCESS_END_TIME
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.Invoice_Flatten
-            WHERE STATUS = 'PROCESSED'
-        """
-        rows_to_insert = session.sql(select_query).collect()
+        if file_name not in stage_filenames:
+            st.error(f"File {file_name} not found in the {stage_name} stage.")
+        else:
+            proc_call = f"""
+                CALL {db_name}.{schema_name}.{"MOVEFILES_TO_SOURCE" if action == "revert" else "IGNOREFILES_TO_STAGE"}('{file_name}');
+            """
+            session.sql(proc_call).collect()
 
-        # If no records to process, exit
-        if not rows_to_insert:
-            return "No records to process from Invoice_Flatten."
+            log_query = f"""
+                INSERT INTO {db_name}.{schema_name}.manual_review_history_log
+                (FILENAME, ACTION, TIMESTAMP, USER_NAME, COMMENTS)
+                VALUES ('{file_name}', '{'Moved to INVOICE_DOCS' if action == "revert" else 'Ignored and moved to IGNORED_DOCS'}',
+                        CURRENT_TIMESTAMP, CURRENT_USER, 'Action completed successfully.');
+            """
+            session.sql(log_query).collect()
 
-        print(f"Found {len(rows_to_insert)} records to process.")
+            delete_query = f"""
+                DELETE FROM {db_name}.{schema_name}.{tables['prefilter']}
+                WHERE FILENAME = '{file_name}';
+            """
+            session.sql(delete_query).collect()
 
-        for record in rows_to_insert:
-            try:
-                # Insert into Invoice_Validated
-                insert_query = f"""
-                    INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.Invoice_Validated (
-                        RELATIVEPATH,
-                        DELIVERY_DATE_VALUE,
-                        ORDER_DATE_VALUE,
-                        PO_NUMBER_VALUE,
-                        SUB_TOTAL_VALUE,
-                        TAX_AMOUNT_VALUE,
-                        TOTAL_AMOUNT_VALUE,
-                        PROCESS_START_TIME,
-                        PROCESS_END_TIME
-                    ) VALUES (
-                        '{record["RELATIVEPATH"].replace("'", "''")}',
-                        '{record["DELIVERY_DATE_VALUE"].replace("'", "''") if record["DELIVERY_DATE_VALUE"] else ""}',
-                        '{record["ORDER_DATE_VALUE"].replace("'", "''") if record["ORDER_DATE_VALUE"] else ""}',
-                        '{record["PO_NUMBER_VALUE"].replace("'", "''") if record["PO_NUMBER_VALUE"] else ""}',
-                        '{record["SUB_TOTAL_VALUE"].replace("'", "''") if record["SUB_TOTAL_VALUE"] else ""}',
-                        '{record["TAX_AMOUNT_VALUE"].replace("'", "''") if record["TAX_AMOUNT_VALUE"] else ""}',
-                        '{record["TOTAL_AMOUNT_VALUE"].replace("'", "''") if record["TOTAL_AMOUNT_VALUE"] else ""}',
-                        '{record["PROCESS_START_TIME"]}',
-                        '{record["PROCESS_END_TIME"]}'
-                    )
-                """
-                session.sql(insert_query).collect()
+            st.success(f"File {file_name} successfully processed.")
+            time.sleep(2)
+            st.rerun()
+    except Exception as e:
+        st.error(f"Failed to process file {file_name}: {str(e)}")
 
-                # Update the record in Invoice_Flatten
+# Score Threshold section
+def score_threshold_section():
+    # Query to fetch data
+    query = "SELECT * FROM SCORE_THRESHOLD"
+    threshold_df = fetch_table_data(query)
+
+    if not threshold_df.empty:
+        # Show the table in a vertical format with a larger height
+        st.write("### Editable Score Thresholds")
+
+        editable_df = st.data_editor(
+            threshold_df,
+            num_rows="dynamic",  # Allows dynamic resizing of rows
+            height=600,  # Sets the height of the editor to make it vertical
+            use_container_width=True  # Expands to container width
+        )
+
+        # Save changes button
+        if st.button("Save Changes"):
+            for _, row in editable_df.iterrows():
                 update_query = f"""
-                    UPDATE DS_DEV_DB.DOC_AI_SCHEMA.Invoice_Flatten
-                    SET STATUS = 'VALIDATED'
-                    WHERE RELATIVEPATH = '{record["RELATIVEPATH"].replace("'", "''")}'
+                    UPDATE {db_name}.{schema_name}.SCORE_THRESHOLD
+                    SET SCORE_VALUE = {row['SCORE_VALUE']}
+                    WHERE SCORE_NAME = '{row['SCORE_NAME']}' AND MODEL_NAME = '{row['MODEL_NAME']}'
                 """
                 session.sql(update_query).collect()
+            st.success("Thresholds updated successfully!")
+    else:
+        st.info("No thresholds available.")
 
-                total_processed += 1
+def metadata_table_selection():
+    # Query to fetch data
+    query = "SELECT * FROM MODEL_METADATA"
+    threshold_df = fetch_table_data(query)
 
-            except Exception as e:
-                # Handle errors and update the record status
-                error_message = f"Error processing record {record['RELATIVEPATH']}: {str(e)}"
-                print(error_message)
+    if not threshold_df.empty:
+        # Show the table in a vertical format with a larger height
+        st.write("### Editable Model MetaData")
 
-                update_error_query = f"""
-                    UPDATE DS_DEV_DB.DOC_AI_SCHEMA.Invoice_Flatten
-                    SET STATUS = 'ERROR',
-                        COMMENTS = '{error_message.replace("'", "''")}'
-                    WHERE RELATIVEPATH = '{record["RELATIVEPATH"].replace("'", "''")}'
-                """
-                session.sql(update_error_query).collect()
+        editable_df = st.data_editor(
+            threshold_df,
+            num_rows="dynamic",  # Allows dynamic resizing of rows
+            height=600,  # Sets the height of the editor to make it vertical
+            use_container_width=True  # Expands to container width
+        )
 
-        return f"Successfully validated {total_processed} records."
+        # Save changes button
+        if st.button("Save Changes"):
+            # Check for changes between original and edited data
+            changes_made = False
 
-    except Exception as e:
-        return f"Procedure failed: {str(e)}"
-$$;
+            for index, row in editable_df.iterrows():
+                # Get the original row for comparison
+                original_row = threshold_df.loc[index, :]
 
+                # Check if any column value has changed
+                if not row.equals(original_row):
+                    changes_made = True
 
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.LOAD_PURCHASE_VALIDATED()
-RETURNS VARCHAR(16777216)
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.8'
-PACKAGES = ('snowflake-snowpark-python')
-HANDLER = 'main'
-EXECUTE AS OWNER
-AS
-$$
-def main(session):
-    try:
-        total_processed = 0
+                    # Dynamically construct the SET clause for all columns
+                    set_clauses = []
+                    for col in threshold_df.columns:
+                        # Escape values to avoid SQL injection and handle NULL values
+                        value = row[col]
+                        if pd.isna(value):  # Check for NULL values
+                            set_clauses.append(f"{col} = NULL")
+                        else:
+                            # Check if the value is a string or numeric
+                            set_clauses.append(f"{col} = '{value}'" if isinstance(value, str) else f"{col} = {value}")
 
-        # Fetch all processed records from Purchase_Flatten
-        select_query = """
-            SELECT 
-                RELATIVEPATH,
-                AMOUNT_VALUE,
-                DISCOUNT_VALUE,
-                INVOICE_DATE_VALUE,
-                ITEM_DESCRIPTIONS_VALUE,
-                PO_NUMBER_VALUE,
-                QUANTITY_VALUE,
-                RATE_VALUE
-            FROM DS_DEV_DB.DOC_AI_SCHEMA.Purchase_Flatten
-            WHERE STATUS = 'PROCESSED'
-            ORDER BY RELATIVEPATH;
-        """
-        rows_to_insert = session.sql(select_query).collect()
+                    set_clause = ", ".join(set_clauses)
 
-        # If no records to process, exit
-        if not rows_to_insert:
-            return "No records to process from Purchase_Flatten."
+                    # Build the UPDATE query
+                    update_query = f"""
+                        UPDATE {db_name}.{schema_name}.MODEL_METADATA
+                        SET {set_clause}
+                        WHERE MODEL_NAME = '{row['MODEL_NAME']}';
+                    """
+   
+                    # Execute the query
+                    try:
+                        session.sql(update_query).collect()
+                    except Exception as e:
+                        st.error(f"Failed to update row for MODEL_NAME '{row['MODEL_NAME']}': {str(e)}")
 
-        print(f"Found {len(rows_to_insert)} records to process.")
-
-        for record in rows_to_insert:
-            try:
-                # Start processing time
-                process_start_time = session.sql("SELECT CURRENT_TIMESTAMP").collect()[0][0]
-
-                # Helper function to handle NULL values
-                def handle_null(value):
-                    return value.replace("'", "''") if value else ""
-
-                # Insert into Purchase_Validated
-                insert_query = f"""
-                    INSERT INTO DS_DEV_DB.DOC_AI_SCHEMA.Purchase_Validated (
-                        RELATIVEPATH,
-                        AMOUNT_VALUE,
-                        DISCOUNT_VALUE,
-                        INVOICE_DATE_VALUE,
-                        ITEM_DESCRIPTIONS_VALUE,
-                        PO_NUMBER_VALUE,
-                        QUANTITY_VALUE,
-                        RATE_VALUE,
-                        PROCESS_START_TIME,
-                        PROCESS_END_TIME
-                    ) VALUES (
-                        '{handle_null(record["RELATIVEPATH"])}',
-                        '{handle_null(record["AMOUNT_VALUE"])}',
-                        '{handle_null(record["DISCOUNT_VALUE"])}',
-                        '{handle_null(record["INVOICE_DATE_VALUE"])}',
-                        '{handle_null(record["ITEM_DESCRIPTIONS_VALUE"])}',
-                        '{handle_null(record["PO_NUMBER_VALUE"])}',
-                        '{handle_null(record["QUANTITY_VALUE"])}',
-                        '{handle_null(record["RATE_VALUE"])}',
-                        '{process_start_time}',
-                        CURRENT_TIMESTAMP
-                    )
-                """
-                session.sql(insert_query).collect()
-
-                # Update the record in Purchase_Flatten
-                update_query = f"""
-                    UPDATE DS_DEV_DB.DOC_AI_SCHEMA.Purchase_Flatten
-                    SET STATUS = 'VALIDATED'
-                    WHERE RELATIVEPATH = '{handle_null(record["RELATIVEPATH"])}';
-                """
-                session.sql(update_query).collect()
-
-                total_processed += 1
-
-            except Exception as e:
-                # Handle errors and update the record status
-                error_message = f"Error processing record {record['RELATIVEPATH']}: {str(e)}"
-                print(error_message)
-
-                update_error_query = f"""
-                    UPDATE DS_DEV_DB.DOC_AI_SCHEMA.Purchase_Flatten
-                    SET STATUS = 'ERROR',
-                        COMMENTS = '{error_message.replace("'", "''")}'
-                    WHERE RELATIVEPATH = '{handle_null(record["RELATIVEPATH"])}';
-                """
-                session.sql(update_error_query).collect()
-
-        return f"Successfully validated {total_processed} records."
-
-    except Exception as e:
-        return f"Procedure failed: {str(e)}"
-$$;
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.MOVEFILES_TO_SOURCE(selected_file VARCHAR)
-RETURNS VARCHAR(16777216)
-LANGUAGE JAVASCRIPT
-EXECUTE AS CALLER
-AS '
-try {
-    // Fetch the selected_file parameter
-    var selectedFile = arguments[0];
-
-    // Escape special characters in the filename for regex
-    var escapedFileName = selectedFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    // Create a regex pattern for the file
-    var completePattern = `.*${escapedFileName}.*`;
-
-    // Copy the file from manual_review stage to INVOICE_DOCS stage
-    var copy_file_query = `
-        COPY FILES INTO @INVOICE_DOCS
-        FROM @manual_review
-        PATTERN = ''${completePattern}''`;
-    snowflake.execute({ sqlText: copy_file_query });
-
-    // Remove the file from manual_review stage
-    var remove_file_query = `
-        REMOVE @manual_review
-        PATTERN = ''${completePattern}''`;
-    snowflake.execute({ sqlText: remove_file_query });
-
-    // Return success message
-    return `File "${selectedFile}" successfully moved from manual_review to INVOICE_DOCS stage and removed from the database.`;
-} catch (err) {
-    return `Failed to process file "${selectedFile}": ${err}`;
-}
-';
-
-
-CREATE OR REPLACE PROCEDURE DS_DEV_DB.DOC_AI_SCHEMA.IGNOREFILES_TO_STAGE(selected_file VARCHAR)
-RETURNS VARCHAR(16777216)
-LANGUAGE JAVASCRIPT
-EXECUTE AS CALLER
-AS '
-try {
-    // Fetch the selected_file parameter
-    var selectedFile = arguments[0];
-
-    // Escape special characters in the filename for regex
-    var escapedFileName = selectedFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    // Create a regex pattern for the file
-    var completePattern = `.*${escapedFileName}.*`;
-
-    // Copy the file from manual_review stage to orderform_doc stage
-    var copy_file_query = `
-        COPY FILES INTO @IGNOIRED_DOCS
-        FROM @manual_review
-        PATTERN = ''${completePattern}''`;
-    snowflake.execute({ sqlText: copy_file_query });
-
-    // Remove the file from manual_review stage
-    var remove_file_query = `
-        REMOVE @manual_review
-        PATTERN = ''${completePattern}''`;
-    snowflake.execute({ sqlText: remove_file_query });
-
-    // Return success message
-    return `File "${selectedFile}" successfully moved from manual_review to orderform_doc stage and removed from the database.`;
-} catch (err) {
-    return `Failed to process file "${selectedFile}": ${err}`;
-}
-';
-
-select * from SCORE_THRESHOLD;
-select * from MODEL_METADATA;
-
-create or replace task DS_DEV_DB.DOC_AI_SCHEMA.EXTRACT_DATA
-	warehouse=DS_DEV_WH
-	schedule='1 MINUTE'
-	as BEGIN
-    CALL Handle_PDF_Files();
-END;
-
-
-CREATE OR REPLACE TASK DS_DEV_DB.DOC_AI_SCHEMA.FLATTEN_DATA
-WAREHOUSE = DS_DEV_WH
-AFTER DS_DEV_DB.DOC_AI_SCHEMA.EXTRACT_DATA
-AS
-BEGIN
-    -- Call procedures for both models
-    CALL DS_DEV_DB.DOC_AI_SCHEMA.LOAD_INVOICE_FLATTEN();
-    CALL DS_DEV_DB.DOC_AI_SCHEMA.LOAD_PURCHASE_FLATTEN();
-END;
-
-CREATE OR REPLACE TASK DS_DEV_DB.DOC_AI_SCHEMA.VALIDATE_DATA
-WAREHOUSE = DS_DEV_WH
-AFTER DS_DEV_DB.DOC_AI_SCHEMA.FLATTEN_DATA
-AS
-BEGIN
-    -- Call procedures for both models
-    CALL DS_DEV_DB.DOC_AI_SCHEMA.LOAD_INVOICE_VALIDATED();
-    CALL DS_DEV_DB.DOC_AI_SCHEMA.LOAD_PURCHASE_VALIDATED();
-END;
-
-
-create or replace task DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESSING
-	warehouse=DS_DEV_WH
-	schedule='1 MINUTE'
-	when SYSTEM$STREAM_HAS_DATA('PREPROCESS_STREAM')
-	as BEGIN
-    CALL COUNT_PDF_PAGES_PROC();
-END;
+            if changes_made:
+                # Commit the changes if necessary
+                try:
+                    session.sql("COMMIT").collect()
+                    st.success("Model Data updated successfully!")
+                except Exception as e:
+                    st.error(f"Error committing changes: {str(e)}")
+            else:
+                st.info("No changes detected.")
+    else:
+        st.info("No Model Data available.")
 
 
 
-create or replace task DS_DEV_DB.DOC_AI_SCHEMA.FILE_CLEANUP
-	warehouse=DS_DEV_WH
-	after DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESSING
-	as BEGIN
-    CALL MANAGE_MANUAL_REVIEW_FILES();
-END;
 
--- Resume the Flatten Data Task
-ALTER TASK DS_DEV_DB.DOC_AI_SCHEMA.FLATTEN_DATA RESUME;
+# Validated Records section
+def validated_records_section(form_selection):
+    """
+    Displays validated records based on the selected form.
+    
+    Args:
+        form_selection (str): The selected form (e.g., "INVOICE MODEL" or "PURCHASED MODEL").
+    """
+    # Determine the table to query based on form_selection
+    if form_selection == "INVOICE MODEL":
+        validated_table = tables["invoice"]["validated"]
+        stage_name = "INVOICE_DOCS"
+    elif form_selection == "PURCHASED MODEL":
+        validated_table = tables["purchase"]["validated"]
+        stage_name = "INVOICE_DOCS"
+    else:
+        st.error("Invalid Model selection.")
+        return
 
--- Resume the Validate Data Task
-ALTER TASK DS_DEV_DB.DOC_AI_SCHEMA.VALIDATE_DATA RESUME;
+    # Query validated records from the selected table
+    query = f"SELECT * FROM {db_name}.{schema_name}.{validated_table}"
+    validated_df = fetch_table_data(query)
 
--- Resume the Preprocessing Task
-ALTER TASK DS_DEV_DB.DOC_AI_SCHEMA.PREPROCESSING RESUME;
+    if not validated_df.empty:
+        # Select the last 10 rows of the DataFrame
+        validated_df = validated_df.tail(10)
+
+        # Display the DataFrame
+        st.dataframe(
+            validated_df,
+            hide_index=True,
+            use_container_width=True
+        )
+
+        # Get list of unique PDF files from RELATIVEPATH
+        if "RELATIVEPATH" in validated_df.columns:
+            pdf_files = validated_df['RELATIVEPATH'].unique().tolist()
+            
+            # Create dropdown for PDF selection
+            st.write("### Select a PDF to view")
+            selected_file = st.selectbox(
+                "Choose a PDF file",
+                options=pdf_files,
+                index=None,
+                placeholder="Select a PDF..."
+            )
+            
+            # Show PDF viewer if a file is selected
+            if selected_file:
+                try:
+                    if "pdf_doc" not in st.session_state or st.session_state.get("current_doc") != selected_file:
+                        cleanup_temp_files()
+                        if load_pdf(selected_file, stage_name):
+                            st.session_state["current_doc"] = selected_file
+
+                    if "pdf_doc" in st.session_state:
+                        st.write("### PDF Viewer")
+                        display_pdf_page()
+
+                        # Navigation controls
+                        nav_container = st.container()
+                        nav1, nav2, nav3 = nav_container.columns([2, 2, 1])
+                        with nav1:
+                            if st.button("⏮️ Previous"):
+                                previous_pdf_page()
+                        with nav2:
+                            total_pages = len(st.session_state["pdf_doc"])
+                            current_page = st.session_state["pdf_page"] + 1
+                            st.write(f"Page {current_page} of {total_pages}")
+                        with nav3:
+                            if st.button("Next ⏭️"):
+                                next_pdf_page()
+                except Exception as e:
+                    st.error(f"Error loading PDF: {str(e)}")
+        else:
+            st.warning("The column 'RELATIVEPATH' does not exist in the data.")
+    else:
+        st.info(f"No validated records found in the {validated_table} table.")
+
+
+
+
+
+    # Cleanup when leaving the section
+    if selected_tab != "Validated Records":
+        cleanup_temp_files()
+
+
+# Call specific functions for the selected tab
+if selected_tab == "Dashboard":
+    # Function calls based on form selection
+    if form_selection == "INVOICE MODEL":
+        I_dashboard_section()  # Call Invoice Dashboard only
+    elif form_selection == "PURCHASED MODEL":
+        P_dashboard_section()  # Call Purchase Dashboard only
+elif selected_tab == "Live view":
+    live_view_logic()  # Call Live View
+elif selected_tab == "Manual Review":
+    manual_review_section()  # Call Manual Review
+elif selected_tab == "Score Threshold":
+    score_threshold_section()  # Call Score Threshold
+elif selected_tab == "Validated Records":
+    validated_records_section(form_selection)  # Pass form_selection to the function
+elif selected_tab == "Settings":
+    metadata_table_selection()  # Call Score Threshold
+
+# Cleanup on session end
+if selected_tab != "Manual Review":
+    cleanup_temp_files()

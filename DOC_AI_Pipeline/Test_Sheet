@@ -1,0 +1,98 @@
+SELECT DS_DEV_DB.DOC_AI_SCHEMA.INVOICE_MODEL!PREDICT(
+  GET_PRESIGNED_URL(@INVOICE_DOCS, 'INV-POPO-12345.pdf'), 1);
+
+
+SELECT DS_DEV_DB.DOC_AI_SCHEMA.PURCHASE_MODEL!PREDICT(
+  GET_PRESIGNED_URL(@INVOICE_DOCS, 'purchases_POPO-12347.pdf'), 1);
+
+
+----------------------------------------------------------------------------------------------------
+
+select * from SCORE_THRESHOLD;
+
+----------------------------manual_review tab history_log--------------------------------------------
+
+select * from MODEL_METADATA;
+
+SELECT * FROM DS_DEV_DB.DOC_AI_SCHEMA.manual_review_history_log;
+
+-------------------------------------------------------------------------------------------------------
+
+
+CALL COUNT_PDF_PAGES_PROC();
+
+select * from PREPROCESS_STREAM;
+
+SELECT * FROM DOCAI_PREFILTER;
+
+list @INVOICE_DOCS;
+
+remove @INVOICE_DOCS;
+---------------------------------------------------------------------------------------------------
+
+
+CALL MANAGE_MANUAL_REVIEW_FILES();
+
+LIST @MANUAL_REVIEW;
+
+remove @MANUAL_REVIEW;
+
+
+LIST @IGNOIRED_DOCS;
+
+remove @IGNOIRED_DOCS;
+-------------------------------------------------------------------------------------------------------
+
+CALL DS_DEV_DB.DOC_AI_SCHEMA.HANDLE_PDF_FILES();
+
+select * from DOCAI_PREFILTER;
+
+select * from DOCAI_ORDERFORM_EXTRACTION;
+
+update DOCAI_PREFILTER set STATUS ='MANUAL REVIEW' where FILENAME = 'purchases_POPO-12348.pdf';
+
+update DOCAI_PREFILTER set STATUS ='NOT PROCESSED' where STATUS = 'PROCESSED';
+
+-------------------------------------------------------------------------------------------------------
+
+CALL DS_DEV_DB.DOC_AI_SCHEMA.LOAD_INVOICE_FLATTEN();
+
+select * from DOCAI_ORDERFORM_EXTRACTION;
+
+select * from Invoice_Flatten;
+
+select * from invoice_col_score_failed_history;
+
+update DOCAI_ORDERFORM_EXTRACTION set STATUS ='NOT PROCESSED' WHERE STATUS ='PROCESSED' ;
+
+-------------------------------------------------------------------------------------------------------
+
+call LOAD_PURCHASE_FLATTEN();
+
+select * from DOCAI_ORDERFORM_EXTRACTION;
+
+select * from Purchase_Flatten;
+
+select * from purchase_col_score_failed_history;
+
+update DOCAI_ORDERFORM_EXTRACTION set STATUS ='NOT PROCESSED' WHERE STATUS ='PROCESSED' ;
+
+-------------------------------------------------------------------------------------------------------
+
+CALL DS_DEV_DB.DOC_AI_SCHEMA.LOAD_INVOICE_VALIDATED();
+
+select * from Invoice_Flatten;
+
+update Invoice_Flatten set STATUS ='PROCESSED' WHERE STATUS ='VALIDATED';
+
+select * from Invoice_Validated;
+
+-------------------------------------------------------------------------------------------------------
+
+call LOAD_PURCHASE_VALIDATED();
+
+select * from Purchase_Validated;
+
+select * from Purchase_Flatten;
+
+-------------------------------------------------------------------------------------------------------
